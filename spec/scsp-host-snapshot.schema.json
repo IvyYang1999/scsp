@@ -225,6 +225,33 @@
             "uniqueItems": true,
             "minItems": 1,
             "examples": [["stripe-webhook-handler", "billing-ui-panel", "subscription-entity-extension"]]
+          },
+          "anchors_used": {
+            "type": "array",
+            "description": "The anchor IDs (hooks and slots) that this capability bound to during installation. Used by /scsp-health to detect anchor drift after host updates.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "examples": [["auth.password_login.post_verify", "settings.security"]]
+          },
+          "host_app_version": {
+            "type": "string",
+            "description": "The version of the host application (from the host manifest 'version' field) at the time of installation. Used to detect host-version drift — if the manifest version changes after install, /scsp-health warns that the capability may need re-validation.",
+            "minLength": 1,
+            "examples": ["1.0.0", "2.3.1"]
+          },
+          "scsp_protocol_version": {
+            "type": "string",
+            "description": "The SCSP protocol version the executor was running at install time. Allows future executors to detect protocol-version mismatches when re-validating installed capabilities.",
+            "pattern": "^0\\.",
+            "examples": ["0.1", "0.2"]
+          },
+          "rollback_type": {
+            "type": "string",
+            "description": "The rollback strategy applied: 'stateless' (snapshot only) or 'stateful' (snapshot + schema migration down scripts).",
+            "enum": ["stateless", "stateful"]
           }
         }
       }

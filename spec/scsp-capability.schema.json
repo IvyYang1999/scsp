@@ -9,9 +9,14 @@
   "properties": {
     "scsp": {
       "type": "string",
-      "description": "The SCSP protocol version this package targets. Must begin with '0.' for the current pre-stable series.",
+      "description": "The SCSP protocol version this package was authored against. Must begin with '0.' for the current pre-stable series.",
       "pattern": "^0\\.",
       "examples": ["0.1", "0.2"]
+    },
+    "scsp_compat": {
+      "type": "string",
+      "description": "A node-semver range specifying the SCSP protocol versions this package is compatible with. Executors must reject packages whose scsp_compat range does not include the executor's own protocol version. Defaults to the exact version in 'scsp' if omitted (strict mode). Use a range like '>=0.1 <0.3' to express forward compatibility.",
+      "examples": [">=0.1 <0.3", "^0.1", "0.1"]
     },
     "id": {
       "type": "string",

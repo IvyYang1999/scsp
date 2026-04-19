@@ -55,8 +55,23 @@ program
       // Verify signature if the capability has author.key and signature fields
       let sigVerified: boolean | null = null;
       let sigWarning: string | undefined;
+      let compatWarning: string | undefined;
       if (result.capability) {
         const fm = result.capability.frontmatter;
+
+        // Protocol version compatibility check (PROTOCOL.md §20.2)
+        const EXECUTOR_VERSION = '0.1';
+        const scspCompat = fm.scsp_compat as string | undefined;
+        const scspDeclared = fm.scsp as string | undefined;
+        if (scspCompat) {
+          const semver = require('semver');
+          if (!semver.satisfies(EXECUTOR_VERSION, scspCompat)) {
+            compatWarning = `Protocol version mismatch: package requires scsp_compat="${scspCompat}", executor is SCSP ${EXECUTOR_VERSION}`;
+          }
+        } else if (scspDeclared && scspDeclared !== EXECUTOR_VERSION) {
+          compatWarning = `Package declares scsp:"${scspDeclared}" with no scsp_compat range — add scsp_compat to express forward compatibility`;
+        }
+
         const hasAuthorKey =
           fm.author && typeof (fm.author as Record<string, unknown>).key === 'string';
         const hasSignature = typeof fm.signature === 'string';
@@ -64,7 +79,7 @@ program
           sigVerified = verifySignature(result.capability);
           if (!sigVerified) {
             sigWarning =
-              'Signature verification failed (placeholder key or tampered file — fix before publishing)';
+              'Signature verification failed — key mismatch or file tampered. Run "scsp keygen <name>" to generate a key pair, then re-sign before publishing.';
           }
         }
       }
@@ -79,6 +94,9 @@ program
       if (!opts.json) {
         if (result.ok) {
           console.log(`\n✓ ${file} [${name}]`);
+          if (compatWarning) {
+            console.warn(`  ⚠  ${compatWarning}`);
+          }
           if (sigVerified === true) {
             console.log(`  ✓ Signature verified`);
           } else if (sigVerified === false) {
@@ -93,6 +111,7 @@ program
           console.error(`\n✗ ${file} [${name}]`);
           allOk = false;
 
+          if (compatWarning) console.warn(`  compat: ${compatWarning}`);
           for (const e of result.parseErrors || []) console.error(`  parse:  ${e}`);
           for (const e of result.schemaErrors || []) console.error(`  schema: ${e}`);
           for (const e of result.consistencyErrors || []) console.error(`  check:  ${e}`);

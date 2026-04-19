@@ -1175,24 +1175,74 @@ Executors may extend this behavior (e.g., adding additional NCV checks, richer t
 
 ## 20. Version Compatibility Rules
 
-### Protocol Version (scsp field)
+### 20.1 Protocol Version Semantics (scsp field)
 
-The `scsp` field in both frontmatter and manifests follows [Semantic Versioning](https://semver.org/):
+The `scsp` field in capability packages and `scsp_manifest` in host manifests follow [Semantic Versioning](https://semver.org/):
 
-- **Patch versions** (0.1.0 → 0.1.1): Bug fixes in schema validation. No new required fields.
-- **Minor versions** (0.1.x → 0.2.x): New optional fields may be added. Executors conformant to 0.1 must ignore unknown fields rather than rejecting the document.
-- **Major versions** (0.x → 1.0): Breaking changes to required fields or execution semantics. Executors must reject capabilities with incompatible major versions.
+- **Patch versions** (0.1.0 → 0.1.1): Bug fixes in schema validation only. No new required fields, no semantic changes.
+- **Minor versions** (0.1.x → 0.2.x): New **optional** fields may be added. New optional execution stages may be introduced. Executors conformant to 0.1 must silently ignore unknown fields rather than rejecting the document. Capabilities authored for 0.1 remain installable by 0.2 executors.
+- **Major versions** (0.x → 1.0 or 1.x → 2.0): Breaking changes to required fields, stage semantics, or NCV enforcement. Executors must reject capabilities whose `scsp_compat` range does not include the executor's own version.
 
-### Manifest Version Constraint
+**Field addition rule**: Any field added in a minor version must be declared `optional` in the schema. A new field becomes required only at the next major version.
 
-A capability's `requires.manifest_version` uses [node-semver](https://github.com/npm/node-semver) range syntax:
+**Field removal rule**: A field may only be removed after one full minor version of deprecation. Deprecated fields must be documented with a `deprecated_since` annotation in the schema and a `sunset_version` at which they will be removed.
+
+### 20.2 Executor–Capability Version Handshake
+
+Every executor declares its own protocol version. Before Phase 1 PROBE, the executor performs a version handshake:
+
+```
+EXECUTOR_VERSION = "0.1"   # the executor's own protocol version
+
+if package.scsp_compat is present:
+    if EXECUTOR_VERSION not in semver_range(package.scsp_compat):
+        abort with VERSION_MISMATCH error
+        message: "Executor runs SCSP {EXECUTOR_VERSION}; package requires {package.scsp_compat}"
+else:
+    # scsp_compat absent — fall back to strict match against scsp field
+    if EXECUTOR_VERSION != package.scsp:
+        warn: "Package declares scsp:{package.scsp} with no scsp_compat range. "
+              "Proceeding with strict-match assumption — add scsp_compat to suppress."
+```
+
+The `scsp_compat` field (node-semver range) expresses forward compatibility:
+```yaml
+scsp: "0.1"
+scsp_compat: ">=0.1 <0.3"   # works with any 0.1 or 0.2 executor
+```
+
+Packages omitting `scsp_compat` are treated as strictly bound to their `scsp` version. This is the safe default for packages that have not been tested across executor versions.
+
+### 20.3 Manifest Version Constraint
+
+A capability's `requires.manifest_version` uses [node-semver](https://github.com/npm/node-semver) range syntax and constrains the **host manifest** version, not the protocol version:
 
 ```yaml
 requires:
-  manifest_version: ">=2.0.0 <3.0.0"
+  manifest_version: ">=1.0.0 <2.0.0"
 ```
 
-The executor must compare this range against the `version` field in the host manifest. A mismatch causes `INCOMPATIBLE_HOST` error at Phase 2.
+The executor compares this range against the `version` field in the host's `scsp-manifest.yaml`. A mismatch causes `INCOMPATIBLE_HOST` error at Phase 2. This is independent of the `scsp_compat` check; both checks must pass.
+
+### 20.4 Install-Time Version Locking
+
+When a capability is successfully installed, the executor records the protocol version in `host-snapshot.json`:
+
+```json
+{
+  "id": "auth-totp-v1",
+  "version": "1.0.0",
+  "installed_at": "2026-04-19T14:30:00Z",
+  "host_app_version": "2.3.1",
+  "scsp_protocol_version": "0.1",
+  "anchors_used": ["auth.password_login.post_verify", "settings.security"],
+  "rollback_type": "stateless"
+}
+```
+
+`host_app_version` is taken from the host manifest `version` field at install time. If `/scsp-health` detects that the manifest version has changed since install, it surfaces a warning: *"Host version changed from 2.3.1 → 2.4.0 since auth-totp-v1 was installed — re-probe recommended."*
+
+`scsp_protocol_version` records which executor version applied the capability. If a newer executor re-runs health checks, it can detect that a capability was installed under an older protocol and flag it for re-validation.
 
 ---
 
@@ -1227,7 +1277,107 @@ The following are intentionally deferred and should not be implemented as protoc
 
 ---
 
-## 22. Host Application Fitness
+## 23. Protocol Migration Contract
+
+This section defines the obligations of the SCSP protocol maintainers when the protocol itself evolves. It is a binding commitment to the ecosystem, not guidance.
+
+### 23.1 What Constitutes a Breaking Change
+
+A breaking change is any modification that causes a previously valid capability package or host manifest to fail validation or installation under a new executor. The following are always breaking:
+
+| Change type | Example |
+|-------------|---------|
+| Adding a required field | Making `scsp_compat` required in the schema |
+| Removing or renaming an existing field | Renaming `blast_radius` to `impact_radius` |
+| Changing the semantics of an existing field | Changing `on_fail: warn` to mean abort instead of skip |
+| Changing stage ordering in the execution model | Moving NCV checks from Phase 3 to Phase 1 |
+| Removing a valid enum value | Removing `layer: "behavior"` as a valid component layer |
+
+The following are **not** breaking:
+- Adding a new optional field
+- Adding a new enum value to an existing field
+- Adding a new optional execution stage
+- Improving error messages or logging verbosity
+
+### 23.2 Pre-Release Period (0.x)
+
+During the `0.x` series, the protocol is in active design. The following relaxed rules apply:
+
+- Breaking changes may occur at any minor version (0.1 → 0.2 is not guaranteed backwards-compatible).
+- Breaking changes must be documented in a `CHANGELOG.md` entry with a migration note.
+- Each minor version must ship a migration guide listing every breaking change and the mechanical transformation required.
+- The `scsp_compat` field in capability packages is the primary mechanism for expressing compatibility across 0.x versions.
+
+**The 1.0 stabilization commitment**: At 1.0, the protocol enters the stable series and the rules in §23.3 take effect. No date is committed; 1.0 will be declared only when the executor conformance suite, registry HTTP API, and signature verification are fully implemented and tested.
+
+### 23.3 Stable Series (1.x and beyond)
+
+Once the protocol reaches 1.0:
+
+- **No breaking changes within a major version.** 1.1, 1.2, 1.3 may only add optional fields and optional stages.
+- **Deprecation window**: A field or behavior may only be removed after a **minimum two-minor-version deprecation window**. Example: a field deprecated in 1.2 may be removed no earlier than 1.4.
+- **Deprecated fields** must be annotated in the JSON Schema with `"deprecated": true` and `"sunset_version": "X.Y"`.
+- **Executor backward compatibility**: Executors conformant to 1.N must be able to install packages authored for any 1.M where M ≤ N.
+- **Major version coexistence**: When 2.0 is released, the 1.x executor must remain available and supported for a minimum of 12 months. The registry must serve both 1.x and 2.x packages simultaneously during this window.
+
+### 23.4 Migration Tooling Obligation
+
+When a breaking change is introduced (in 0.x) or a major version is released:
+
+The protocol maintainers must ship a migration tool within the same release:
+
+```bash
+npx @scsp/migrate --from 0.1 --to 0.2 ./my-feature.scsp
+```
+
+The migration tool must:
+1. Auto-fill new required fields with safe defaults where possible
+2. Flag fields that require human input with `# MIGRATION TODO:` comments
+3. Validate the output against the new schema
+4. Report a diff of what was changed
+
+Community-authored packages that cannot be auto-migrated must be marked `revoked: true` in the registry index until their author publishes an updated version.
+
+### 23.5 Registry Protocol Version Matrix
+
+The registry `index.json` carries the `scsp_compat` field per capability entry. Executors may filter the registry by their own protocol version before presenting results to users:
+
+```bash
+# Only show packages compatible with this executor's protocol version
+scsp search --scsp-version 0.1 auth
+```
+
+The registry API (V0.3+) must support the `?scsp_version=0.1` query parameter to return only compatible packages. Packages without `scsp_compat` declared are assumed to match only their exact `scsp` version.
+
+### 23.6 Executor Conformance Declaration
+
+A conforming executor must declare its protocol version in any output that references SCSP:
+
+```
+[SCSP executor 0.1 · Claude Code skill]
+```
+
+When installing a package authored for an older protocol version, the executor must surface:
+
+```
+⚠  This package was authored for SCSP 0.1. You are running SCSP 0.2.
+   The package's scsp_compat range (>=0.1 <0.3) includes this version.
+   Proceeding — new optional fields will use defaults.
+```
+
+When the version is outside the package's `scsp_compat` range, installation is refused:
+
+```
+✗  VERSION_MISMATCH
+   Package requires SCSP >=0.1 <0.2. Executor runs SCSP 0.2.
+   Options:
+     - Ask the package author to publish a 0.2-compatible version
+     - Install using an SCSP 0.1 executor: scsp install --scsp-version 0.1 auth-totp-v1
+```
+
+---
+
+*SCSP Protocol Specification V0.1 — Last updated 2026-04-19*
 
 This section defines which categories of software are appropriate targets for SCSP capability packages, and which are not. It is intended as guidance for manifest authors, capability authors, and executor implementers.
 

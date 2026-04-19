@@ -1,5 +1,6 @@
 ---
 scsp: "0.1"
+scsp_compat: ">=0.1 <0.3"
 id: swob-session-summarizer-v1
 name: "AI Session Summarizer"
 version: "1.0.0"
