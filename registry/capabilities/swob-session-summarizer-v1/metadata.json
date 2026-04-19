@@ -1,0 +1,23 @@
+{
+  "id": "swob-session-summarizer-v1",
+  "name": "AI Session Summarizer",
+  "version": "1.0.0",
+  "tags": ["ai", "productivity", "session", "swob"],
+  "layer": "module",
+  "description": "AI Session Summarizer adds on-demand, AI-generated 2-3 sentence digests to every Claude Code session in Swob. Instead of relying on raw firstUserMessage, it reads key turns and produces a cached summary: what was built, what decisions were made, and the outcome. Summaries are generated lazily, cached in Library metadata, and never block the UI. Gracefully degrades when ANTHROPIC_API_KEY is absent.",
+  "surfaces": ["entities", "logic_domains", "ui_areas"],
+  "anchors": {
+    "hooks": ["session.parse.post_build"],
+    "slots": ["toolbar.actions", "info_panel.sections"],
+    "entities": ["SessionSummary"]
+  },
+  "author_name": "ivy",
+  "author_key": "ed25519:MCowBQYDK2VwAyEAb3r9pQmK8nZvXqJsLfTwCdUeYhGiNmRoSpWxOkHtA1E=",
+  "active_installs": 1,
+  "installs": 1,
+  "fork_count": 0,
+  "compatibility_score": 0.96,
+  "pricing_model": "free",
+  "signed": true,
+  "revoked": false
+}

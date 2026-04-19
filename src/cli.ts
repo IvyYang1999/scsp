@@ -13,6 +13,7 @@ import { runSnapshot } from './snapshot';
 import { runPublish } from './publisher';
 import { explore } from './explore';
 import { upgrade } from './upgrader';
+import { installSkills, listSkills, uninstallSkills } from './skills';
 
 const program = new Command();
 
@@ -469,6 +470,58 @@ program
       });
     } catch (err) {
       console.error(`Upgrade failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── skills ───────────────────────────────────────────────────────────────────
+
+const skillsCmd = program
+  .command('skills')
+  .description('Manage SCSP Claude Code skills (scsp-onboard, scsp-sync, scsp-review)');
+
+skillsCmd
+  .command('install [skills...]')
+  .description('Install SCSP skills into Claude Code (~/.claude/skills/ by default)')
+  .option('--global', 'Install to ~/.claude/skills/ (default)', true)
+  .option('--project', 'Install to .claude/skills/ in the current directory')
+  .action(async (skills: string[], opts: { global: boolean; project?: boolean }) => {
+    try {
+      await installSkills({
+        skills,
+        global: !opts.project,
+      });
+    } catch (err) {
+      console.error(`Skills install failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+skillsCmd
+  .command('list')
+  .description('List available SCSP skills and their installation status')
+  .action(async () => {
+    try {
+      await listSkills();
+    } catch (err) {
+      console.error(`Skills list failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+skillsCmd
+  .command('uninstall [skills...]')
+  .description('Remove installed SCSP skills')
+  .option('--global', 'Remove from ~/.claude/skills/ (default)', true)
+  .option('--project', 'Remove from .claude/skills/ in the current directory')
+  .action(async (skills: string[], opts: { global: boolean; project?: boolean }) => {
+    try {
+      await uninstallSkills({
+        skills,
+        global: !opts.project,
+      });
+    } catch (err) {
+      console.error(`Skills uninstall failed: ${(err as Error).message}`);
       process.exit(1);
     }
   });

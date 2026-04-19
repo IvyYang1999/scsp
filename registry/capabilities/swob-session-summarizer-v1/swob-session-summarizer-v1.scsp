@@ -1,0 +1,264 @@
+---
+scsp: "0.1"
+id: swob-session-summarizer-v1
+name: "AI Session Summarizer"
+version: "1.0.0"
+tags: ["ai", "productivity", "session", "swob"]
+
+author:
+  name: ivy
+  key: "ed25519:MCowBQYDK2VwAyEAb3r9pQmK8nZvXqJsLfTwCdUeYhGiNmRoSpWxOkHtA1E="
+signature: "ed25519:7a1b4c8d2e5f9a0b3c6d7e8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+created: "2026-04-19T08:00:00Z"
+revoked: false
+
+env_hint:
+  runtime:
+    - "node>=18"
+  frameworks:
+    - electron
+
+requires:
+  manifest_version: ">=0.1"
+  runtime_profile:
+    kind: electron
+  surfaces:
+    entities:
+      - SessionSummary
+    ui_areas:
+      - toolbar
+      - info_panel
+    logic_domains:
+      - session
+  anchors:
+    hooks:
+      - session.parse.post_build
+    slots:
+      - toolbar.actions
+      - info_panel.sections
+
+components:
+  - id: summarizer-backend
+    layer: module
+    optional: false
+    surfaces_touched:
+      - session
+      - SessionSummary
+    anchors_used:
+      - session.parse.post_build
+    blast_radius:
+      structural_impact:
+        - SessionSummary
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - session
+      external_deps:
+        - "@anthropic-ai/sdk"
+
+  - id: summarizer-toolbar-btn
+    layer: component
+    optional: true
+    depends_on:
+      - summarizer-backend
+    surfaces_touched:
+      - toolbar
+    anchors_used:
+      - toolbar.actions
+    blast_radius:
+      structural_impact:
+        - UI
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - toolbar
+
+  - id: summarizer-info-panel
+    layer: component
+    optional: true
+    depends_on:
+      - summarizer-backend
+    surfaces_touched:
+      - info_panel
+    anchors_used:
+      - info_panel.sections
+    blast_radius:
+      structural_impact:
+        - UI
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - info_panel
+
+conflicts: []
+
+risk_factors:
+  auto_derived: true
+  additional:
+    - "Requires ANTHROPIC_API_KEY env var at runtime. If absent, summarizer silently falls back to firstUserMessage as title — no crash, no data loss."
+    - "Summary generation is async and happens after session load; first open of a session shows a loading skeleton in the info panel."
+---
+
+## Intent
+
+AI Session Summarizer adds an on-demand, AI-generated summary to every Claude Code session in Swob. Instead of relying on the raw `firstUserMessage` (which is often a vague continuation prompt), the summarizer reads the session's key turns and produces a 2–3 sentence digest: what was being built, what decisions were made, and what the outcome was.
+
+**Why this matters for Swob users.** Power users accumulate hundreds of sessions. "Fix the bug" or "Continue from where you left off" tells you nothing three weeks later. A crisp AI summary — generated once and cached — makes sessions instantly recognizable in the sidebar and searchable by outcome rather than just keyword.
+
+**Design principles.**
+- **Lazy, cached generation**: summaries are produced on first view and stored in the Library's session metadata. Re-opening the same session is instant.
+- **Non-blocking**: summary generation happens in a background IPC call after the session detail panel renders. The UI never waits.
+- **Graceful degradation**: if `ANTHROPIC_API_KEY` is absent or the API call fails, the component hides itself entirely — no error toast, no broken panel.
+- **Privacy-preserving**: only the first 10 user turns and last 5 assistant turns are sent for summarization, never tool results or file contents. Users can opt-out per-session via a toggle in the info panel.
+
+**What gets added to Swob.**
+
+1. **`summarizer-backend`** — hooks into `session.parse.post_build` to attach a `summaryStatus: 'pending' | 'ready' | 'error'` field to SessionSummary. Registers a new IPC handler `summary:generate` that accepts a sessionId and streams the Claude API response, then saves the result to the Library's session metadata via `config:setSessionMeta`.
+
+2. **`summarizer-toolbar-btn`** (optional) — injects a ✦ button into `toolbar.actions`. Clicking it triggers `summary:generate` for the currently selected session and scrolls the info panel to the summary section.
+
+3. **`summarizer-info-panel`** (optional) — injects a collapsible "AI Summary" section at the top of `info_panel.sections`, above the existing metadata rows. Shows a skeleton while generating, the summary text once ready, and a ↺ regenerate button.
+
+```yaml probes:
+- id: probe-session-summary-entity
+  target: entity
+  surface: SessionSummary
+  description: "Verify SessionSummary entity exists with firstUserMessage and filePath fields — minimum required to generate a meaningful summary."
+  check:
+    type: entity_fields
+    entity: SessionSummary
+    required_fields:
+      - name: firstUserMessage
+        types: [string]
+      - name: filePath
+        types: [string]
+      - name: sessionId
+        types: [string]
+  on_fail: abort
+  message: "SessionSummary entity not found or missing required fields. Cannot generate summaries without session data."
+
+- id: probe-session-hook
+  target: hook
+  surface: session
+  description: "Verify session.parse.post_build hook exists to attach summary status to freshly parsed sessions."
+  check:
+    type: hook_exists
+    hook: session.parse.post_build
+    hook_signature:
+      receives: [summary, filePath]
+      can_augment_return: true
+  on_fail: abort
+  message: "session.parse.post_build hook is absent. The summarizer backend cannot attach to the session loading pipeline."
+
+- id: probe-toolbar-slot
+  target: slot
+  surface: toolbar
+  description: "Verify toolbar.actions slot exists to inject the summarize button."
+  check:
+    type: slot_exists
+    slot: toolbar.actions
+    accepts: [react_element]
+  on_fail: warn
+  message: "toolbar.actions slot not found — summarizer-toolbar-btn will be skipped. AI Summary panel in InfoPanel still works."
+
+- id: probe-info-panel-slot
+  target: slot
+  surface: info_panel
+  description: "Verify info_panel.sections slot exists to inject the AI Summary section."
+  check:
+    type: slot_exists
+    slot: info_panel.sections
+    accepts: [react_element]
+  on_fail: warn
+  message: "info_panel.sections slot not found — summarizer-info-panel will be skipped. The toolbar button will still trigger generation but results won't be displayed inline."
+```
+
+```yaml ncv:
+- id: no-full-content-sent
+  constraint: "The summarizer MUST NOT send tool_result content, file contents, or base64 image data to the Claude API. Only textContent fields from user and assistant turns are permitted."
+  enforcement: static_analysis
+  patterns:
+    - language: typescript
+      forbidden_patterns:
+        - "toolCalls"          # tool results must be stripped before API call
+        - "images"             # image data must never be sent
+        - "base64"
+  severity: critical
+
+- id: no-summary-overwrites-user-data
+  constraint: "The generated summary MUST be stored under a dedicated key (e.g. meta.aiSummary) in sessionMeta. It MUST NOT overwrite customTitle, notes, or highlights set by the user."
+  enforcement: contract
+  check:
+    api_call: config:setSessionMeta
+    allowed_keys: [aiSummary, summaryGeneratedAt, summaryOptOut]
+    forbidden_keys: [customTitle, notes, highlights]
+  severity: high
+
+- id: api-key-never-logged
+  constraint: "ANTHROPIC_API_KEY MUST NOT appear in any log output, IPC payload, or error message."
+  enforcement: static_analysis
+  patterns:
+    - language: any
+      forbidden_patterns:
+        - "process.env.ANTHROPIC_API_KEY"   # must only be read, never serialized
+        - "ANTHROPIC_API_KEY"
+      allowed_contexts:
+        - "new Anthropic({"                  # only in SDK initialization
+  severity: critical
+```
+
+```yaml contracts:
+- id: contract-summary-generate-success
+  description: "Requesting a summary for a valid session returns a 2–3 sentence digest within 10 seconds and stores it in sessionMeta."
+  given:
+    session_exists: true
+    session_has_messages: true
+    anthropic_api_key: present
+  when:
+    action: ipc summary:generate
+    args:
+      sessionId: "test-session-id"
+  then:
+    - response.status: ok
+    - response.summary: length_between(80, 400)
+    - db.sessionMeta[test-session-id].aiSummary: equals(response.summary)
+    - db.sessionMeta[test-session-id].summaryGeneratedAt: present
+    - db.sessionMeta[test-session-id].customTitle: unchanged
+
+- id: contract-summary-graceful-degradation
+  description: "If ANTHROPIC_API_KEY is absent, the IPC handler returns status:'skipped' and no sessionMeta is written."
+  given:
+    session_exists: true
+    anthropic_api_key: absent
+  when:
+    action: ipc summary:generate
+    args:
+      sessionId: "test-session-id"
+  then:
+    - response.status: skipped
+    - response.reason: "no_api_key"
+    - db.sessionMeta[test-session-id].aiSummary: absent
+
+- id: contract-opt-out-respected
+  description: "If the user has set summaryOptOut:true for a session, summary:generate returns status:'opted_out' without calling the API."
+  given:
+    session_exists: true
+    sessionMeta[test-session-id].summaryOptOut: true
+    anthropic_api_key: present
+  when:
+    action: ipc summary:generate
+    args:
+      sessionId: "test-session-id"
+  then:
+    - response.status: opted_out
+    - anthropic_api: not_called
+```

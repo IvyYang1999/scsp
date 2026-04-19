@@ -30,6 +30,7 @@
 19. [Executor Conformance Requirements](#19-executor-conformance-requirements)
 20. [Version Compatibility Rules](#20-version-compatibility-rules)
 21. [V0.1 Scope Declaration](#21-v01-scope-declaration)
+22. [Host Application Fitness](#22-host-application-fitness)
 
 ---
 
@@ -214,7 +215,44 @@ external_dependencies:
     description: "Authentication library. Auth hook integrations must be compatible with next-auth session handling."
     version_constraint: ">=4.0.0"
     impact_scope: ["authentication", "User"]
+
+# Optional — declares the host's runtime profile.
+# Required for non-web hosts (Electron, CLI tools, local services).
+# If omitted, executors assume kind: "web".
+runtime_profile:
+  kind: "web"           # web | electron | cli | service
+  verify:
+    strategy: "http"    # http | ipc | cli | function
 ```
+
+### runtime_profile Field Reference
+
+`runtime_profile` is an **optional** top-level field in `scsp-manifest.yaml`. When omitted, executors treat the host as `kind: "web"` with `verify.strategy: "http"`.
+
+| `kind` | Description | Default verify strategy |
+|--------|-------------|------------------------|
+| `web` | Server-side web application or API service. The application is accessible at a local URL during verification. | `http` |
+| `electron` | Electron desktop application. The renderer process runs web technology (React/Vue/Svelte); the main process exposes IPC channels. | `ipc` |
+| `cli` | Command-line tool without a persistent server process. | `cli` |
+| `service` | Local daemon or background service that may expose a non-HTTP socket or RPC interface. | `function` |
+
+#### Electron manifest example
+
+```yaml
+runtime_profile:
+  kind: "electron"
+  build:
+    command: "npm run build"          # command to produce a runnable artifact after apply
+    artifact: "dist-electron/"        # path to built output (informational)
+    test_command: "npm run test:e2e"  # optional: runs before VERIFY stage
+  verify:
+    strategy: "ipc"
+    # IPC contracts call Electron main-process handlers via contextBridge.
+    # The executor spawns the app in a headless test harness and communicates
+    # over the declared channels.
+```
+
+When `build.command` is declared, executors MUST run it as the final step of Phase 5 (APPLY), after all file writes and dependency installs. If the build command exits non-zero, Phase 5 fails and rollback is triggered before Phase 6 begins.
 
 ---
 
@@ -671,12 +709,64 @@ Contracts are behavioral assertions. They are used by executors to generate exec
 |---|---|
 | `name` | Unique contract name |
 | `component` | The component ID this contract tests |
+| `contract_type` | Verification transport: `http` (default), `ipc`, `cli`, or `function` |
 | `precondition` | Entity state and fixture to set up |
 | `action` | Interface method to call with arguments |
 | `assertions` | Array of `{field, operator, value}` checks on the output |
 | `then` | Optional array of sequential follow-up assertions |
 
 **Constraint**: Contracts may only reference fields declared in the `interfaces` section. This allows executors to validate contracts structurally before executing them.
+
+#### contract_type Reference
+
+`contract_type` tells the executor how to invoke the capability's interface during the VERIFY stage. It must match the host's `runtime_profile.verify.strategy`.
+
+| `contract_type` | Invocation semantics | Typical host kind |
+|-----------------|----------------------|-------------------|
+| `http` | Execute an HTTP request against a locally running server. Uses `action.method`, `action.path`, and `action.body`. | `web`, `service` |
+| `ipc` | Send an Electron IPC message via `contextBridge` and await the response. Uses `action.channel` and `action.args`. | `electron` |
+| `cli` | Invoke a subprocess with arguments and check stdout/stderr/exit code. Uses `action.command` and `action.args`. | `cli` |
+| `function` | Call a named export from a specified module file directly (in-process). Uses `action.module` and `action.export`. | `service`, `electron` (main process) |
+
+**IPC contract example** (for an Electron capability):
+
+```yaml contracts:
+- name: "vault-encryption-enabled"
+  component: "vault-lock"
+  contract_type: ipc
+  precondition:
+    entity_state: "VaultSettings"
+    fixture: "locked_vault"
+  action:
+    channel: "vault:status:get"
+    args:
+      vaultId: "$fixture.locked_vault.id"
+  assertions:
+    - field: "result.encrypted"
+      operator: eq
+      value: true
+    - field: "result.algorithm"
+      operator: eq
+      value: "AES-256-GCM"
+```
+
+**CLI contract example** (for a CLI tool capability):
+
+```yaml contracts:
+- name: "new-command-exits-zero"
+  component: "search-filter"
+  contract_type: cli
+  action:
+    command: "mytool search"
+    args: ["--filter", "type:pdf", "query"]
+  assertions:
+    - field: "exit_code"
+      operator: eq
+      value: 0
+    - field: "stdout"
+      operator: contains
+      value: "results"
+```
 
 ### Interfaces
 
@@ -743,7 +833,8 @@ Installing a capability is a six-stage transaction. Each stage must complete suc
 2. Execute schema migrations for all components with `schema_migration: true`.
 3. Install declared `external_deps` (e.g., `npm install otplib`).
 4. Executor generates executable tests from the `contracts:` and `fixtures:` sections using the `interfaces:` declarations.
-5. Run generated tests.
+5. **Build step** (non-web hosts only): If the host manifest declares `runtime_profile.build.command`, execute it now. A non-zero exit code triggers immediate rollback — Phase 6 is not entered.
+6. Run generated tests.
 
 ### Phase 6: VERIFY AND FINALIZE
 
@@ -752,6 +843,12 @@ Installing a capability is a six-stage transaction. Each stage must complete suc
 | Core success | All `optional: false` contracts pass | Update snapshot, report success |
 | Partial success | Optional contract fails but side effects are isolated | Update snapshot with warning; surface to user |
 | Full rollback | Any NCV violation triggered during apply, or `optional: false` contract fails | Execute rollback for all applied components; execute schema migration `down` SQL for stateful components; remove `external_deps`; report `INSTALL_FAILED` |
+
+Contract execution in Phase 6 dispatches according to `contract_type`:
+- **`http`**: Executor starts (or connects to) the application's local server and issues HTTP requests.
+- **`ipc`**: Executor launches the Electron application in a headless test harness (e.g., Playwright Electron), invokes `contextBridge`-exposed channels, and awaits responses.
+- **`cli`**: Executor invokes the tool as a subprocess and inspects stdout, stderr, and exit code.
+- **`function`**: Executor imports the specified module in-process and calls the named export directly.
 
 On success, the executor updates `installed_capabilities` in `host-snapshot.json`.
 
@@ -1123,6 +1220,109 @@ The following are intentionally deferred and should not be implemented as protoc
 - **Community UI components**: Embeddable marketplace widgets and in-app browsing UI are registry-layer, not protocol-layer.
 - **Payment integration**: Paid capability access, licensing tokens, and author revenue sharing are registry-layer concerns.
 - **A2A (Agent-to-Agent) Protocol**: Direct negotiation between executor agents on different hosts is a V0.2 research item.
+
+---
+
+*SCSP Protocol Specification V0.1 — Last updated 2026-04-19*
+
+---
+
+## 22. Host Application Fitness
+
+This section defines which categories of software are appropriate targets for SCSP capability packages, and which are not. It is intended as guidance for manifest authors, capability authors, and executor implementers.
+
+### 22.1 Five Prerequisite Conditions
+
+A host application is a valid SCSP target if and only if it satisfies all five of the following conditions:
+
+| # | Condition | Rationale |
+|---|-----------|-----------|
+| **P1** | **Source-available**: The codebase is accessible to the executor at install time (open-source or shared-source). | `scsp init`, `scsp snapshot`, and Phase 1 PROBE all require filesystem access to source files. Closed-source binaries cannot be scanned. |
+| **P2** | **Nameable extension points**: The application has identifiable surfaces (entities, logic domains, UI areas) and stable anchors (hooks, slots) that can be declared in a manifest. | Without a manifest, capability packages cannot express *where* they connect to the host. |
+| **P3** | **Intent-expressible changes**: An improvement to the application can be described as an abstract intent that an AI agent can translate into concrete code changes. | If correct behavior requires formal proofs, hardware-level timing constraints, or domain knowledge beyond the executor's reach, code generation is unsafe. |
+| **P4** | **Additive-reversible changes**: The improvement adds new behavior without replacing core logic, and can be rolled back by restoring prior file state and reverting schema migrations. | Rollback is a protocol guarantee. Changes that fundamentally restructure application architecture, or whose side effects cannot be reversed (e.g., irreversible data transformations), break this guarantee. |
+| **P5** | **Behavior verifiable post-install**: The executor can confirm correct behavior after installation using one of the supported verification strategies (`http`, `ipc`, `cli`, `function`). | Phase 6 VERIFY is mandatory. A capability that cannot be verified cannot safely declare a success state. |
+
+### 22.2 Well-Suited Application Categories
+
+The following application categories satisfy all five prerequisite conditions and represent the intended primary targets of the SCSP ecosystem.
+
+#### Web Applications and API Services (`kind: web`)
+
+Server-side web applications — regardless of language or framework — are the canonical SCSP host type. MVC architecture maps directly onto SCSP surfaces: models → `entities`, controllers/routes → `logic_domains`, views/templates → `ui_areas`. Middleware chains, event hooks, and component slots provide natural anchor points. HTTP contracts provide straightforward post-install verification.
+
+**Representative frameworks**: Express, Next.js, Django, Rails, FastAPI, Gin, Laravel, Spring Boot.
+
+**Characteristic improvements**: authentication enhancements, workflow automation, audit logging, notification extensions, UI component injection, schema extensions.
+
+#### Electron Desktop Applications (`kind: electron`)
+
+Electron applications are first-class SCSP hosts. The renderer process exposes the same surface vocabulary as a web application (React/Vue/Svelte components, IPC-backed logic domains). The main process provides hook points via IPC channel registration. Post-install verification uses the `ipc` contract type, with the executor launching the application in a headless Electron test harness.
+
+Electron hosts must declare `runtime_profile.kind: "electron"` in their manifest. If the application requires a build step after source changes, `runtime_profile.build.command` must also be declared. The executor will run the build command at the end of Phase 5; a build failure triggers rollback before Phase 6.
+
+**Representative applications**: RSS readers, note-taking tools, markdown editors, local-first productivity tools, developer utilities built on web technology.
+
+**Characteristic improvements**: local data encryption, custom view modes, keyboard shortcut layers, sync backends, theme injection, format exporters.
+
+**Constraint**: Electron capability packages must not use `contract_type: http` unless the application explicitly starts an HTTP server. Use `contract_type: ipc` for renderer-to-main communication and `contract_type: function` for main-process-only logic.
+
+#### CLI Tools and Local Services (`kind: cli` / `kind: service`)
+
+Command-line tools and local daemon processes can declare extension points as subcommand hooks, output formatters, or pipeline stages. Post-install verification uses `contract_type: cli` (checking exit codes, stdout patterns) or `contract_type: function` (calling exported functions in-process).
+
+**Representative applications**: developer tools, search utilities, local indexing services, file processing pipelines.
+
+**Characteristic improvements**: new subcommands, output format plugins, filter stages, integration adapters.
+
+### 22.3 Unsuitable Application Categories
+
+The following categories fail one or more prerequisite conditions. SCSP must not be used as a distribution mechanism for changes to these systems.
+
+#### Closed-Source Commercial Software
+
+**Fails P1.** The executor has no access to source files. `scsp init` cannot scan the codebase; Phase 1 PROBE has nothing to search. The manifest cannot be declared by anyone other than the software's author. SCSP cannot improve software whose source is not available to the installer.
+
+*Examples: Notion, Typora, Figma, Adobe products.*
+
+#### Safety-Critical and Regulated Systems
+
+**Fails P3 and P4.** Medical device software (IEC 62304), avionics software (DO-178C), automotive control units (ISO 26262), and nuclear safety systems require every line of code change to be formally reviewed, traced to requirements, and validated through documented test evidence. AI-generated code changes with probabilistic correctness guarantees do not satisfy these regulatory frameworks. Automated rollback is not an acceptable substitute for pre-deployment verification in safety-critical contexts. Capability packages must never be published for, or installed into, software in these categories.
+
+#### Real-Time Systems
+
+**Fails P3 and P5.** Game engines, audio processing engines, hardware control loops, and high-frequency trading systems impose hard latency constraints — often sub-millisecond — that AI-generated code cannot be guaranteed to satisfy. Performance correctness is not expressible as a behavioral contract verifiable by `http`, `ipc`, `cli`, or `function` invocations at the protocol level. A capability that passes all contract assertions may still introduce a garbage collection pause or a cache miss that breaks real-time guarantees invisibly.
+
+#### Distributed Systems Spanning Multiple Independent Codebases
+
+**Fails P4 in cross-service scenarios.** A capability package targets a single codebase under a single manifest. When a meaningful improvement requires coordinated changes across multiple independent services — each with its own repository, deployment pipeline, and team — no single capability package can express or atomically apply the full change. Installing the client-side half of a cross-service feature without the server-side half produces an inconsistent system state that the rollback mechanism cannot fully repair.
+
+*Note*: A microservice with its own `scsp-manifest.yaml` can independently host capability packages that improve that service in isolation. The restriction applies only to improvements that are inherently cross-service.
+
+#### Systems Without Natural Extension Points
+
+**Fails P2.** Some applications are architecturally monolithic: business logic is not separated into domains, data access is scattered throughout the codebase, and there are no identifiable call sites suitable for hook injection. Writing a `scsp-manifest.yaml` for such a system produces anchors that are either meaningless or so broad that any capability touching them has an unbounded blast radius. SCSP cannot substitute for architectural discipline; it requires extension points to already exist in some form before they can be named.
+
+### 22.4 The Role of Existing Plugin Systems
+
+If an application already has a mature plugin or extension system (e.g., a VS Code extension API, an Obsidian plugin API, a Raycast extension system), SCSP is **not** the appropriate improvement mechanism for that application. The existing system provides a safer, more constrained, and better-documented contract than a SCSP manifest can offer. Capability packages should not be used to bypass or circumvent an application's published extension API.
+
+SCSP is intended for applications that lack extension points entirely — giving them a community improvement ecosystem without requiring the developer to design a plugin architecture from scratch.
+
+### 22.5 Summary Table
+
+| Category | P1 | P2 | P3 | P4 | P5 | Verdict |
+|---|---|---|---|---|---|---|
+| Web application | ✓ | ✓ | ✓ | ✓ | ✓ | **Suitable** |
+| Electron app (open-source) | ✓ | ✓ | ✓ | ✓ | ✓ | **Suitable** |
+| CLI tool (open-source) | ✓ | ✓ | ✓ | ✓ | ✓ | **Suitable** |
+| Local service / daemon | ✓ | ✓ | ✓ | ✓ | ✓ | **Suitable** |
+| Closed-source software | ✗ | — | — | — | — | **Not suitable** |
+| Safety-critical system | ✓ | ✓ | ✗ | ✗ | — | **Not suitable** |
+| Real-time system | ✓ | ✓ | ✗ | ✓ | ✗ | **Not suitable** |
+| Multi-repo distributed system | ✓ | ✓ | ✓ | ✗ | ✓ | **Not suitable (cross-service)** |
+| Monolith without extension points | ✓ | ✗ | — | — | — | **Not suitable** |
+| App with mature plugin API | ✓ | ✓ | ✓ | ✓ | ✓ | **Plugin API preferred** |
 
 ---
 

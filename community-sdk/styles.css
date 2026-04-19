@@ -124,6 +124,9 @@
   padding: 0;
 }
 
+/* Ensure [hidden] always wins over display: flex/grid set on components */
+[hidden] { display: none !important; }
+
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
@@ -816,24 +819,6 @@ code, pre { font-family: var(--font-mono); }
   color: var(--color-success);
 }
 
-.install-box {
-  background-color: var(--color-bg-secondary);
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.install-box-label {
-  padding: var(--space-2) var(--space-4);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
-  border-bottom: 1px solid var(--color-border);
-  background-color: var(--color-bg-tertiary);
-}
-
 .install-box-content {
   display: flex;
   align-items: center;
@@ -968,8 +953,84 @@ code, pre { font-family: var(--font-mono); }
 .blast-dot.filled.high { background-color: var(--color-error); }
 
 /* --------------------------------------------------------------------------
-   Embed Section
+   Modal Install Tabs (CLI / Claude Code)
    -------------------------------------------------------------------------- */
+.modal-install-tabs {
+  display: flex;
+  gap: 0;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow: hidden;
+  border-bottom: none;
+}
+
+.modal-install-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  border-right: 1px solid var(--color-border);
+}
+
+.modal-install-tab:last-child { border-right: none; }
+
+.modal-install-tab:hover:not(.modal-install-tab--active) {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.modal-install-tab--active {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+/* Intent preview box */
+.modal-intent-box {
+  background-color: var(--color-bg-secondary);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  min-height: 80px;
+}
+
+.modal-intent-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modal-intent-text {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.modal-intent-text::-webkit-scrollbar { width: 4px; }
+.modal-intent-text::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+/* Install box connected to tab bar */
+.install-box {
+  background-color: var(--color-bg-secondary);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
 .embed-section {
   background: linear-gradient(135deg,
     color-mix(in srgb, var(--color-primary) 5%, var(--color-bg)),
