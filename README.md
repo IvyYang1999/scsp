@@ -92,7 +92,7 @@ This separation is what makes SCSP language-agnostic: capability packages refere
 ## Quick Start
 
 ```bash
-npm install -g scsp
+npm install -g @yytyyf/scsp
 ```
 
 ### Validate a capability package

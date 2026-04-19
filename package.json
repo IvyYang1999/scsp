@@ -1,5 +1,5 @@
 {
-  "name": "scsp",
+  "name": "@yytyyf/scsp",
   "version": "0.1.0",
   "description": "Software Capability Sharing Protocol — decentralized software evolution through agent-native capability packages",
   "main": "dist/index.js",
@@ -12,7 +12,7 @@
     "validate:all": "ts-node src/cli.ts validate examples/capabilities/auth-totp.scsp examples/capabilities/calendar-week-view.scsp examples/capabilities/approval-workflow.scsp examples/capabilities/perf-image-lazy-load.scsp",
     "test": "npm run validate:all",
     "update-index": "node scripts/update-index.js",
-    "publish": "bash scripts/publish-pr.sh"
+    "publish-registry": "bash scripts/publish-pr.sh"
   },
   "keywords": [
     "scsp",
