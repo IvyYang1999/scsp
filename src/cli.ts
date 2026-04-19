@@ -9,6 +9,8 @@ import { runKeygen, signCapability, verifySignature } from './keygen';
 import { install, healthCheck } from './executor';
 import { pack } from './packer';
 import { search, fetchMetadata, type CapabilityMetadata } from './registry';
+import { runSnapshot } from './snapshot';
+import { runPublish } from './publisher';
 
 const program = new Command();
 
@@ -198,7 +200,7 @@ program
 program
   .command('publish <file>')
   .description('Publish a .scsp capability package to a registry')
-  .option('--registry <url>', 'Registry URL (git repo or HTTP)', 'https://github.com/scsp-community/registry')
+  .option('--registry <url>', 'Registry URL (git repo or HTTP)', 'https://github.com/IvyYang1999/scsp')
   .action((file: string, opts: { registry: string }) => {
     console.log(`Publishing ${file} to ${opts.registry}...`);
     console.log('');
@@ -273,7 +275,7 @@ program
 program
   .command('install <id>')
   .description('Install a capability package (6-stage AI-powered execution)')
-  .option('--registry <url>', 'Registry URL', 'https://raw.githubusercontent.com/scsp-community/registry/main')
+  .option('--registry <url>', 'Registry URL', 'https://raw.githubusercontent.com/IvyYang1999/scsp/main/registry')
   .option('--dry-run', 'Run through all stages but do not apply changes')
   .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
   .option('--local <file>', 'Install from a local .scsp file instead of registry')
@@ -412,6 +414,36 @@ program
       console.log('');
     } catch (err) {
       console.error(`Info failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── snapshot ─────────────────────────────────────────────────────────────────
+
+program
+  .command('snapshot')
+  .description('Scan project and generate host-snapshot.json for capability compatibility checks')
+  .option('--cwd <path>', 'Project directory to scan', '.')
+  .action(async (opts: { cwd: string }) => {
+    try {
+      await runSnapshot(opts.cwd);
+    } catch (err) {
+      console.error(`Snapshot failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── publish (real) ───────────────────────────────────────────────────────────
+
+program
+  .command('publish-cap <file>')
+  .description('Publish a .scsp capability package to the registry via Pull Request')
+  .option('--registry-repo <repo>', 'Target GitHub repo (owner/repo)', 'IvyYang1999/scsp')
+  .action(async (file: string, opts: { registryRepo: string }) => {
+    try {
+      await runPublish(file, opts.registryRepo);
+    } catch (err) {
+      console.error(`Publish failed: ${(err as Error).message}`);
       process.exit(1);
     }
   });

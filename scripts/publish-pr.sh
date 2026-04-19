@@ -31,7 +31,7 @@ die()     { error "$*"; exit 1; }
 
 # ── Args ───────────────────────────────────────────────────────────────────────
 SCSP_FILE="${1:-}"
-REGISTRY_REPO="${2:-scsp-community/registry}"
+REGISTRY_REPO="${2:-IvyYang1999/scsp}"
 
 [ -z "$SCSP_FILE" ] && die "Usage: $0 <scsp-file> [registry-repo]"
 [ -f "$SCSP_FILE" ] || die "File not found: $SCSP_FILE"
@@ -94,7 +94,7 @@ git clone \
 cd "$REGISTRY_DIR"
 
 git sparse-checkout init --cone
-git sparse-checkout set "capabilities" "registry"
+git sparse-checkout set "registry"
 git checkout || die "git checkout failed."
 success "Registry cloned."
 

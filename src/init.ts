@@ -5,7 +5,7 @@ import * as yaml from 'js-yaml';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface DetectedRuntime {
+export interface DetectedRuntime {
   language: 'node' | 'python' | 'go' | 'ruby' | 'java' | 'unknown';
   frameworks: string[];
   packageName?: string;
@@ -31,7 +31,7 @@ interface SuggestedAnchors {
   slots: Array<{ id: string; description: string }>;
 }
 
-interface ScanResult {
+export interface ScanResult {
   runtime: DetectedRuntime;
   directories: DetectedDirectories;
   surfaces: DetectedSurfaces;
@@ -672,7 +672,7 @@ function suggestAnchors(runtime: DetectedRuntime, surfaces: DetectedSurfaces): S
 
 // ─── Full scan ────────────────────────────────────────────────────────────────
 
-function scanProject(cwd: string): ScanResult {
+export function scanProject(cwd: string): ScanResult {
   const runtime = detectRuntime(cwd);
   const directories = detectDirectories(cwd);
   const entities = scanEntitiesFromFiles(cwd, directories.models, runtime.language);

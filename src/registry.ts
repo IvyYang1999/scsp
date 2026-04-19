@@ -63,7 +63,7 @@ export interface AuthorInfo {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_REGISTRY = 'https://raw.githubusercontent.com/scsp-community/registry/main';
+const DEFAULT_REGISTRY = 'https://raw.githubusercontent.com/IvyYang1999/scsp/main/registry';
 
 // Resolve a registry URL — supports:
 //   https://...         → remote HTTP fetch
