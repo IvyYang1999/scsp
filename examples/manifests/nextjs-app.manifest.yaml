@@ -1,0 +1,517 @@
+scsp-manifest: "0.1"
+name: "My Next.js App"
+version: "1.0.0"
+
+# ─────────────────────────────────────────────
+# SURFACES
+# ─────────────────────────────────────────────
+surfaces:
+  entities:
+    - User
+    - Post
+    - Comment
+    - Tag
+    - Notification
+    - Media
+
+  ui_areas:
+    - settings
+    - dashboard
+    - nav
+    - profile
+    - documents
+    - blog
+    - calendar
+    - auth
+    - admin
+
+  logic_domains:
+    - auth
+    - notification
+    - payment
+    - content
+    - search
+    - analytics
+
+# ─────────────────────────────────────────────
+# ANCHORS
+# ─────────────────────────────────────────────
+anchors:
+  hooks:
+    - id: auth.password_login.post_verify
+      description: >
+        Fires in the NextAuth.js authorize callback after credentials are
+        validated. Return a modified user object to add session fields, return
+        null to reject the login (triggers 2FA challenge redirect via
+        signIn callback customization).
+      location: "app/api/auth/[...nextauth]/route.ts (authorize callback)"
+      receives:
+        - user:
+            id: string
+            email: string
+            role: string
+        - credentials:
+            email: string
+            password: string
+      can_short_circuit: true
+      short_circuit_shape:
+        null: "Returning null rejects the login"
+        user_with_challenge:
+          id: string
+          email: string
+          totp_required: boolean
+
+    - id: auth.session.on_create
+      description: >
+        Fires in the NextAuth.js jwt callback when a new token is created
+        (initial sign in). Use to embed additional claims into the JWT.
+      location: "app/api/auth/[...nextauth]/route.ts (jwt callback)"
+      receives:
+        - token: object
+        - user: object
+      can_short_circuit: false
+      returns: token
+
+    - id: auth.logout.post_destroy
+      description: >
+        Server Action called after NextAuth signOut destroys the session.
+        Use for cleanup: invalidating refresh tokens, clearing server-side
+        caches, audit logging.
+      location: "lib/actions/auth.ts"
+      receives:
+        - user_id: string
+        - session_token: string
+      can_short_circuit: false
+
+    - id: document.save.post_write
+      description: >
+        Server Action hook that fires after a document/post is saved.
+        Implemented as a Next.js Server Action wrapper that capabilities
+        can register handlers on.
+      location: "lib/actions/documents.ts"
+      receives:
+        - document_id: string
+        - actor_id: string
+        - changeset: object
+      can_short_circuit: true
+      short_circuit_shape:
+        error: string
+        status_code: integer
+
+    - id: notification.send.pre_dispatch
+      description: >
+        Hook in the notification service (lib/services/notification.ts)
+        before a notification is dispatched. Can suppress or transform.
+      location: "lib/services/notification.ts"
+      receives:
+        - notification_type: string
+        - recipient_id: string
+        - payload: object
+      can_short_circuit: true
+
+    - id: render.image.pre_output
+      description: >
+        Wrapper around Next.js <Image> component. Capabilities can register
+        a transform function that receives image props before the Next.js
+        Image component renders. Useful for lazy loading, analytics, etc.
+        Note: Next.js built-in Image already handles lazy loading natively —
+        this hook is provided for custom augmentation beyond the defaults.
+      location: "components/ui/Image.tsx"
+      receives:
+        - props:
+            src: string
+            alt: string
+            width: integer
+            height: integer
+            priority: boolean
+        - render_context:
+            is_server: boolean
+            route: string
+      returns: props
+
+  slots:
+    - id: settings.security
+      description: >
+        Security settings panel slot in the /settings/security page.
+        Rendered as a stack of Card components below the "Password" section.
+      location: "app/(dashboard)/settings/security/page.tsx"
+      accepts: [panel, card, "shadcn/ui Card"]
+      layout: stacked
+      max_components: 4
+      region: "main content, after PasswordCard"
+
+    - id: settings.profile
+      description: >
+        Profile settings panel slot on /settings/profile page.
+      location: "app/(dashboard)/settings/profile/page.tsx"
+      accepts: [panel, card, form-section]
+      layout: stacked
+
+    - id: settings.account
+      description: >
+        Account settings panel slot on /settings/account page.
+        For billing, subscription, danger zone components.
+      location: "app/(dashboard)/settings/account/page.tsx"
+      accepts: [panel, card]
+      layout: stacked
+
+    - id: dashboard.pending-actions
+      description: >
+        Widget slot in the /dashboard page, right sidebar column.
+        For surfacing items requiring user action.
+      location: "app/(dashboard)/dashboard/page.tsx"
+      accepts: [widget, card]
+      layout: stacked
+      max_components: 6
+      region: "aside.right-sidebar"
+
+    - id: dashboard.calendar-preview
+      description: >
+        Mini calendar/schedule widget slot on the dashboard, main column,
+        below the stats row.
+      location: "app/(dashboard)/dashboard/page.tsx"
+      accepts: [widget]
+      layout: single
+      max_components: 1
+      region: "main.content-grid, row-3"
+
+    - id: dashboard.quick-stats
+      description: >
+        Additional stat card slot in the dashboard stats row (top of main
+        content). Each component should render a single stat card.
+      location: "app/(dashboard)/dashboard/page.tsx"
+      accepts: [stat-card]
+      layout: horizontal-grid
+      max_components: 3
+
+    - id: documents.action-bar
+      description: >
+        Action area in the document editor toolbar (top-right). For workflow
+        actions, publish buttons, etc.
+      location: "app/(dashboard)/documents/[id]/page.tsx"
+      accepts: [button, button-group, "shadcn/ui DropdownMenu"]
+      layout: horizontal
+
+    - id: documents.detail.sidebar
+      description: >
+        Right sidebar on the document detail/editor page. For metadata,
+        workflow status, comments, etc.
+      location: "app/(dashboard)/documents/[id]/page.tsx"
+      accepts: [panel, card, "shadcn/ui Sheet"]
+      layout: stacked
+
+    - id: calendar.main-view
+      description: >
+        Primary view area in /calendar. View mode plugins are registered
+        here and appear as tabs in the view switcher.
+      location: "app/(dashboard)/calendar/page.tsx"
+      accepts: [view]
+      layout: replace-or-tab
+      max_components: 5
+      region: "main.calendar-viewport"
+
+    - id: nav.primary
+      description: >
+        Additional nav items in the left sidebar navigation. Items are
+        rendered as navigation links with icon + label.
+      location: "components/layout/Sidebar.tsx"
+      accepts: [nav-item]
+      layout: list
+      max_components: 8
+
+    - id: nav.user-menu
+      description: >
+        Items in the user avatar dropdown menu in the top bar.
+      location: "components/layout/TopBar.tsx"
+      accepts: [menu-item, "shadcn/ui DropdownMenuItem"]
+      layout: list
+      max_components: 6
+
+    - id: admin.dashboard
+      description: >
+        Widget slots in the /admin dashboard for metrics, moderation queues,
+        and system health panels.
+      location: "app/(admin)/admin/page.tsx"
+      accepts: [widget, panel]
+      layout: grid-2col
+      max_components: 8
+
+  entities:
+    - id: User
+      description: "Authenticated user account, managed by NextAuth + Prisma adapter."
+      location: "prisma/schema.prisma (model User)"
+      core_fields:
+        - name: id
+          type: String
+          prisma_type: "@id @default(cuid())"
+          nullable: false
+        - name: email
+          type: String
+          prisma_type: "@unique"
+          nullable: false
+        - name: emailVerified
+          type: DateTime
+          nullable: true
+        - name: name
+          type: String
+          nullable: true
+        - name: image
+          type: String
+          nullable: true
+          description: "Profile image URL (from OAuth provider or uploaded)"
+        - name: role
+          type: String
+          prisma_type: "@default(\"user\")"
+          nullable: false
+          description: "user | editor | manager | admin"
+        - name: hashedPassword
+          type: String
+          nullable: true
+          description: "bcrypt hash for credentials auth. Null for OAuth-only accounts."
+        - name: createdAt
+          type: DateTime
+          prisma_type: "@default(now())"
+        - name: updatedAt
+          type: DateTime
+          prisma_type: "@updatedAt"
+
+    - id: Post
+      description: "Blog post or document authored by a User."
+      location: "prisma/schema.prisma (model Post)"
+      core_fields:
+        - name: id
+          type: String
+          prisma_type: "@id @default(cuid())"
+        - name: title
+          type: String
+          nullable: false
+        - name: slug
+          type: String
+          prisma_type: "@unique"
+          nullable: false
+        - name: content
+          type: String
+          nullable: true
+          description: "Markdown or rich text content"
+        - name: excerpt
+          type: String
+          nullable: true
+        - name: status
+          type: String
+          prisma_type: "@default(\"draft\")"
+          description: "draft | published | archived"
+        - name: authorId
+          type: String
+          foreign_key: "User.id"
+          nullable: false
+        - name: publishedAt
+          type: DateTime
+          nullable: true
+        - name: createdAt
+          type: DateTime
+          prisma_type: "@default(now())"
+        - name: updatedAt
+          type: DateTime
+          prisma_type: "@updatedAt"
+
+    - id: Comment
+      description: "Comment on a Post."
+      location: "prisma/schema.prisma (model Comment)"
+      core_fields:
+        - name: id
+          type: String
+          prisma_type: "@id @default(cuid())"
+        - name: postId
+          type: String
+          foreign_key: "Post.id"
+        - name: authorId
+          type: String
+          foreign_key: "User.id"
+        - name: body
+          type: String
+          nullable: false
+        - name: createdAt
+          type: DateTime
+          prisma_type: "@default(now())"
+
+# ─────────────────────────────────────────────
+# HINTS
+# ─────────────────────────────────────────────
+hints:
+  architecture:
+    description: >
+      Next.js 14+ with App Router, TypeScript, Prisma ORM, PostgreSQL,
+      Tailwind CSS, and shadcn/ui components. Server Components by default;
+      Client Components opt-in with 'use client'. Authentication via
+      NextAuth.js v5 (Auth.js) with Prisma adapter.
+    framework:
+      name: nextjs
+      version: "^14"
+      router: app-router
+      rendering_default: server-components
+      typescript: true
+    database:
+      orm: prisma
+      dialect: postgresql
+      schema_file: "prisma/schema.prisma"
+      migrations_dir: "prisma/migrations"
+      client_import: "import { db } from '@/lib/db'"
+      connection_env_var: DATABASE_URL
+    auth:
+      library: "next-auth v5 (Auth.js)"
+      config_file: "auth.ts (project root)"
+      session_strategy: database
+      adapter: "@auth/prisma-adapter"
+      env_vars:
+        - AUTH_SECRET
+        - AUTH_URL
+    ui:
+      component_library: "shadcn/ui"
+      component_dir: "components/ui/"
+      styling: "Tailwind CSS v3"
+      tailwind_config: "tailwind.config.ts"
+      icons: "lucide-react"
+
+  conventions:
+    routes:
+      pattern: "app/(group)/{route}/page.tsx"
+      api_routes: "app/api/{resource}/route.ts"
+      route_groups:
+        "(auth)": "Unauthenticated routes (login, register, reset-password)"
+        "(dashboard)": "Authenticated app routes (protected by middleware)"
+        "(admin)": "Admin-only routes"
+        "(marketing)": "Public marketing pages"
+      middleware: "middleware.ts (root) — handles auth protection via NextAuth"
+      examples:
+        - "app/(dashboard)/settings/security/page.tsx"
+        - "app/(dashboard)/documents/[id]/page.tsx"
+        - "app/api/documents/route.ts"
+        - "app/api/documents/[id]/route.ts"
+
+    server_actions:
+      pattern: "lib/actions/{domain}.ts"
+      directive: "'use server' at top of file"
+      validation: "zod schemas in lib/validations/{domain}.ts"
+      examples:
+        - "lib/actions/auth.ts"
+        - "lib/actions/documents.ts"
+        - "lib/actions/notifications.ts"
+
+    models:
+      pattern: "Prisma models in prisma/schema.prisma"
+      migration_command: "npx prisma migrate dev --name {migration_name}"
+      seed_file: "prisma/seed.ts"
+      client_singleton: "lib/db.ts"
+
+    components:
+      server_components: "components/{Domain}/{ComponentName}.tsx (no 'use client')"
+      client_components: "components/{Domain}/{ComponentName}.client.tsx ('use client' at top)"
+      ui_primitives: "components/ui/ (shadcn/ui — do not modify directly, extend via wrapping)"
+      layout: "components/layout/ (Sidebar, TopBar, Footer)"
+      naming: "PascalCase files and exports"
+
+    data_fetching:
+      server_component_pattern: "Direct Prisma call in async Server Component"
+      client_pattern: "SWR or TanStack Query with route handler"
+      cache: "React cache() for request deduplication; Next.js fetch cache for external APIs"
+      revalidation: "revalidatePath() or revalidateTag() in Server Actions after mutations"
+
+    tests:
+      runner: vitest
+      ui_testing: "@testing-library/react"
+      pattern: "{component}.test.tsx or {module}.test.ts"
+      e2e:
+        runner: playwright
+        dir: "e2e/"
+        command: "npx playwright test"
+      command: "npm test"
+      database: "Prisma test environment with DATABASE_URL_TEST"
+
+    environment:
+      required_vars:
+        - DATABASE_URL
+        - AUTH_SECRET
+        - AUTH_URL
+        - NEXTAUTH_URL
+      optional_vars:
+        - RESEND_API_KEY
+        - STRIPE_SECRET_KEY
+        - STRIPE_WEBHOOK_SECRET
+        - CLOUDINARY_URL
+        - UPSTASH_REDIS_REST_URL
+        - UPSTASH_REDIS_REST_TOKEN
+      env_files:
+        - ".env.local (gitignored, local development)"
+        - ".env.test.local (gitignored, test environment)"
+        - ".env.example (committed, documents required vars)"
+
+    error_handling:
+      server_components: "notFound() or redirect() from next/navigation"
+      server_actions: "Return { error: string } shape — never throw to client"
+      api_routes: "NextResponse.json({ error }, { status: N })"
+      global_error: "app/global-error.tsx"
+      not_found: "app/not-found.tsx"
+
+    typescript:
+      strict: true
+      path_alias: "@/ maps to project root"
+      types_dir: "types/ (global type declarations)"
+
+# ─────────────────────────────────────────────
+# EXTERNAL DEPENDENCIES
+# ─────────────────────────────────────────────
+external_dependencies:
+  - id: stripe-api
+    name: "Stripe Payment Processing"
+    service: stripe
+    sdk: stripe
+    version: "^15"
+    env_vars:
+      - STRIPE_SECRET_KEY
+      - STRIPE_WEBHOOK_SECRET
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    surfaces: [payment]
+    integration_file: "lib/stripe.ts"
+    documentation: "https://stripe.com/docs/api"
+
+  - id: resend-api
+    name: "Resend Transactional Email"
+    service: resend
+    sdk: resend
+    version: "^3"
+    env_vars:
+      - RESEND_API_KEY
+      - RESEND_FROM_EMAIL
+    surfaces: [notification]
+    integration_file: "lib/email.ts"
+    template_dir: "emails/ (React Email templates)"
+    documentation: "https://resend.com/docs"
+
+  - id: upstash-redis
+    name: "Upstash Redis (rate limiting & caching)"
+    service: upstash-redis
+    sdk: "@upstash/redis"
+    version: "^1"
+    env_vars:
+      - UPSTASH_REDIS_REST_URL
+      - UPSTASH_REDIS_REST_TOKEN
+    surfaces: [auth, analytics]
+    integration_file: "lib/redis.ts"
+    usage:
+      - "Rate limiting (auth attempts, API calls)"
+      - "Session cache"
+      - "Feature flags"
+    documentation: "https://upstash.com/docs/redis"
+
+  - id: cloudinary
+    name: "Cloudinary Image Management"
+    service: cloudinary
+    sdk: "next-cloudinary"
+    version: "^5"
+    env_vars:
+      - NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+      - CLOUDINARY_API_KEY
+      - CLOUDINARY_API_SECRET
+    surfaces: [content, documents]
+    integration_file: "lib/cloudinary.ts"
+    documentation: "https://next.cloudinary.dev"

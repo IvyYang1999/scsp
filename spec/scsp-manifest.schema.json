@@ -1,0 +1,274 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scsp.dev/schemas/manifest/0.1",
+  "title": "SCSP Host Manifest",
+  "description": "Validates scsp-manifest.yaml — the file host application developers author to declare their application's stable extension surface to the SCSP ecosystem. Capability packages express requirements against this manifest.",
+  "type": "object",
+  "required": ["scsp-manifest", "name", "version", "repo", "surfaces", "anchors"],
+  "additionalProperties": false,
+  "properties": {
+    "scsp-manifest": {
+      "type": "string",
+      "description": "The version of the scsp-manifest specification this file conforms to, in semver format.",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "examples": ["0.1.0"]
+    },
+    "name": {
+      "type": "string",
+      "description": "The human-readable name of the host application.",
+      "minLength": 1,
+      "examples": ["Acme SaaS Platform", "InvoiceFlow"]
+    },
+    "version": {
+      "type": "string",
+      "description": "The current version of the host application, in semver format. Capability packages may target a specific range of host versions.",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "examples": ["3.14.0", "1.0.0-rc.2"]
+    },
+    "repo": {
+      "type": "string",
+      "description": "The canonical URL of the host application's source code repository. Used by tooling and agents to locate files during capability installation.",
+      "format": "uri",
+      "examples": ["https://github.com/acme/saas-platform"]
+    },
+    "surfaces": {
+      "type": "object",
+      "description": "The named surfaces this host exposes to capability packages. Surfaces represent stable, versioned areas of the host that packages can interact with. Capability packages declare which surfaces they require in their 'requires.surfaces' field.",
+      "required": ["entities", "ui_areas", "logic_domains"],
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "type": "array",
+          "description": "The data entity surfaces this host exposes. Each string is a unique entity identifier that maps to a domain object in the host's data model (e.g. a database table, ActiveRecord model, or ORM entity).",
+          "items": {
+            "type": "string",
+            "description": "An entity surface identifier.",
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "examples": [["User", "Organization", "Invoice", "Subscription"]]
+        },
+        "ui_areas": {
+          "type": "array",
+          "description": "The UI regions this host exposes for capability packages to render into. Each string is a stable identifier for a navigable region of the application's interface.",
+          "items": {
+            "type": "string",
+            "description": "A UI area identifier.",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true,
+          "examples": [["settings-page", "dashboard-sidebar", "nav-bar", "user-profile-panel"]]
+        },
+        "logic_domains": {
+          "type": "array",
+          "description": "The business logic domains this host exposes. Each string is a stable identifier for a bounded context or service area in the host's application logic.",
+          "items": {
+            "type": "string",
+            "description": "A logic domain identifier.",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true,
+          "examples": [["auth", "billing", "notifications", "reporting"]]
+        }
+      }
+    },
+    "anchors": {
+      "type": "object",
+      "description": "Specific, named extension points within the host that capability packages can bind to. Anchors are more precise than surfaces — they identify exact callsites, mount points, or entity extension points.",
+      "required": ["hooks", "slots", "entities"],
+      "additionalProperties": false,
+      "properties": {
+        "hooks": {
+          "type": "array",
+          "description": "Lifecycle hooks the host exposes for capability packages to subscribe to. Hooks are invoked at specific points in the host's execution flow.",
+          "items": {
+            "type": "object",
+            "description": "A single lifecycle hook anchor.",
+            "required": ["id", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "A unique, stable identifier for this hook. Should follow a verb_noun pattern describing when it fires.",
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "examples": ["after_user_created", "before_invoice_sent", "on_subscription_cancelled"]
+              },
+              "description": {
+                "type": "string",
+                "description": "A human-readable description of when this hook fires and what context it provides to subscribers.",
+                "minLength": 1,
+                "examples": ["Fires after a new User record has been persisted to the database. Receives the full User object."]
+              },
+              "deprecated_by": {
+                "type": "string",
+                "description": "If this hook is deprecated, the id of the hook that supersedes it. Installers will warn when a capability package binds to a deprecated hook.",
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "examples": ["after_user_registered"]
+              },
+              "sunset": {
+                "type": "string",
+                "description": "If this hook is deprecated, the date (ISO 8601) after which it may be removed. Installers will surface this date in deprecation warnings.",
+                "format": "date",
+                "examples": ["2025-12-31"]
+              }
+            }
+          },
+          "uniqueItems": false
+        },
+        "slots": {
+          "type": "array",
+          "description": "UI mount points the host exposes for capability packages to render components into. Slots are stable, named locations in the host's component tree.",
+          "items": {
+            "type": "object",
+            "description": "A single UI slot anchor.",
+            "required": ["id", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "A unique, stable identifier for this slot. Should use a 'area::location' naming convention.",
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9:_-]*$",
+                "examples": ["settings::billing-section", "nav::user-menu-items", "dashboard::sidebar-widgets"]
+              },
+              "description": {
+                "type": "string",
+                "description": "A human-readable description of where this slot renders and what kind of content it accepts.",
+                "minLength": 1,
+                "examples": ["A slot within the Settings page, inside the Billing section, below the current plan display."]
+              }
+            }
+          },
+          "uniqueItems": false
+        },
+        "entities": {
+          "type": "array",
+          "description": "Entity-level extension anchors that allow capability packages to add fields, associations, or behaviours to the host's data model entities.",
+          "items": {
+            "type": "object",
+            "description": "A single entity anchor, representing an extensible data model entity.",
+            "required": ["id", "description", "core_fields"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "A unique identifier for this entity anchor, typically 'entity::<EntityName>'.",
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9:_-]*$",
+                "examples": ["entity::User", "entity::Organization", "entity::Invoice"]
+              },
+              "description": {
+                "type": "string",
+                "description": "A human-readable description of the entity and the extension contract — what fields capability packages may add and any constraints.",
+                "minLength": 1,
+                "examples": ["Represents a registered user account. Capability packages may add nullable columns to the users table."]
+              },
+              "core_fields": {
+                "type": "array",
+                "description": "The core field names of this entity that the host guarantees will always be present. Capability packages can depend on these fields without declaring them as required surfaces.",
+                "items": {
+                  "type": "string",
+                  "description": "A field name on the entity.",
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                },
+                "uniqueItems": true,
+                "examples": [["id", "email", "created_at", "updated_at"]]
+              }
+            }
+          },
+          "uniqueItems": false
+        }
+      }
+    },
+    "hints": {
+      "type": "object",
+      "description": "Optional hints about the host application's architecture and conventions. These help AI-driven installers and code generation tools produce idiomatic code that integrates cleanly with the host.",
+      "additionalProperties": false,
+      "properties": {
+        "architecture": {
+          "type": "string",
+          "description": "A free-form description of the host application's high-level architecture (e.g. 'monolith', 'microservices', 'event-driven', 'hexagonal').",
+          "minLength": 1,
+          "examples": ["Rails monolith with a React frontend. API layer is JSON:API compliant.", "Next.js full-stack app with Prisma ORM and a tRPC API layer."]
+        },
+        "conventions": {
+          "type": "object",
+          "description": "Hints about naming, structural, and style conventions in specific areas of the codebase. Used by AI installers to generate consistent code.",
+          "additionalProperties": false,
+          "properties": {
+            "routes": {
+              "type": "string",
+              "description": "Describes how API and page routes are structured and named in this codebase.",
+              "minLength": 1,
+              "examples": ["REST API routes under /api/v1/<resource>. Route files live in app/controllers/api/v1/.", "File-based routing via Next.js app router. API routes under app/api/<resource>/route.ts."]
+            },
+            "models": {
+              "type": "string",
+              "description": "Describes the ORM or data-access layer and naming conventions for models.",
+              "minLength": 1,
+              "examples": ["ActiveRecord models in app/models/, PascalCase, inherit from ApplicationRecord.", "Prisma schema in prisma/schema.prisma. Generated client used directly in server components."]
+            },
+            "components": {
+              "type": "string",
+              "description": "Describes the UI component structure and naming conventions.",
+              "minLength": 1,
+              "examples": ["React components in app/javascript/components/, organised by feature. Use Tailwind CSS for styling.", "shadcn/ui components in components/ui/. Feature components in components/<feature>/."]
+            },
+            "tests": {
+              "type": "string",
+              "description": "Describes the test framework, file naming, and where test files live.",
+              "minLength": 1,
+              "examples": ["RSpec. Specs mirror the app/ structure under spec/. Use FactoryBot for fixtures.", "Vitest for unit tests, Playwright for e2e. Test files co-located with source files as *.test.ts."]
+            }
+          }
+        }
+      }
+    },
+    "external_dependencies": {
+      "type": "array",
+      "description": "Third-party services, APIs, or libraries that the host application depends on. Capability packages can reference these to avoid introducing duplicate or conflicting dependencies.",
+      "items": {
+        "type": "object",
+        "description": "A single external dependency of the host application.",
+        "required": ["id", "description", "version_constraint", "impact_scope"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A unique identifier for the dependency, matching the package manager's canonical name (e.g. npm package name, PyPI name, or a well-known service slug).",
+            "minLength": 1,
+            "examples": ["stripe", "sendgrid", "@sentry/nextjs", "redis"]
+          },
+          "description": {
+            "type": "string",
+            "description": "A human-readable description of what this dependency does and how the host uses it.",
+            "minLength": 1,
+            "examples": ["Stripe SDK — used for all payment processing and subscription management.", "Redis — used for background job queues and session storage."]
+          },
+          "version_constraint": {
+            "type": "string",
+            "description": "The version range constraint in use (npm-compatible semver range or equivalent). Capability packages must respect this constraint when using the same dependency.",
+            "minLength": 1,
+            "examples": ["^14.0.0", ">=6.0.0 <7.0.0", "~3.2.1"]
+          },
+          "impact_scope": {
+            "type": "array",
+            "description": "The surface or logic domain identifiers in this manifest that this dependency underpins. Helps capability packages understand which areas of the host are coupled to this dependency.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true,
+            "examples": [["billing", "entity::Subscription"], ["auth", "entity::User"]]
+          }
+        }
+      }
+    }
+  }
+}

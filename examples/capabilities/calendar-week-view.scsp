@@ -1,0 +1,383 @@
+---
+scsp: "0.1"
+id: calendar-week-view-v1
+name: "Calendar Week View"
+version: "1.0.0"
+tags: ["ui", "calendar", "productivity"]
+
+author:
+  name: bob
+  key: "ed25519:MCowBQYDK2VwAyEA7r2kLmP9vXqNsD4wJhTfYbCeZuGnRiOpWxMaKjHsE1V="
+signature: "ed25519:7a2f5b8d1e4c7f0a3d6b9c2e5f8a1d4e7b0c3f6a9d2e5b8c1f4a7d0e3b6c9f2a5d8e1b4c7f0a3d6b9c2e5f"
+created: "2026-04-05T09:00:00Z"
+revoked: false
+
+env_hint:
+  runtime:
+    - "node>=18"
+    - "deno>=1.40"
+  frameworks:
+    - react
+    - vue
+    - svelte
+    - nextjs
+
+requires:
+  manifest_version: ">=0.1"
+  surfaces:
+    ui_areas:
+      - calendar
+      - dashboard
+  anchors:
+    slots:
+      - calendar.main-view
+
+components:
+  - id: week-view-widget
+    layer: component
+    optional: false
+    surfaces_touched:
+      - calendar
+      - dashboard
+    anchors_used:
+      - calendar.main-view
+    blast_radius:
+      structural_impact:
+        - UI
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - calendar
+      schema_migration: false
+      external_deps: []
+
+conflicts: []
+
+risk_factors:
+  auto_derived: true
+  additional: []
+---
+
+## Intent
+
+Calendar Week View adds a 7-day horizontal week grid to the host application's calendar surface. It slots into the `calendar.main-view` anchor alongside (or replacing) any existing month or list views, switchable via a view-mode toggle.
+
+**Motivation.** Month views lose time-of-day context; day views show too little. The week view is the productivity sweet spot: it gives a full schedule at a glance and is the primary view in every major calendar product (Google Calendar, Outlook, Apple Calendar). Applications that track tasks, bookings, appointments, or events consistently see higher engagement with a week view available.
+
+**Design principles.**
+- Pure UI — zero schema migrations, zero new API routes. The component consumes whatever event/appointment data the host already exposes, adapting to the existing data model via a thin adapter layer declared in the interface contract.
+- Drag-and-drop event rescheduling using the browser-native Drag-and-Drop API with a Pointer Events fallback for touch devices. No third-party DnD library required.
+- Timezone-correct rendering: all times are converted to the user's local timezone (or an explicit `displayTimezone` prop) using the `Intl.DateTimeFormat` API — no moment.js or date-fns dependency.
+- Accessible: WCAG 2.1 AA keyboard navigation (arrow keys to move focus between time slots, Enter to create, Escape to cancel), ARIA grid role, screen-reader announcements on drag completion.
+- Responsive: collapses gracefully to a 3-day view on viewports narrower than 640px, and to a single-day view on mobile (<480px) — matching the adaptive pattern used by Google Calendar.
+
+**Behavior state machine.**
+```
+[Hidden]
+    │  user clicks "Week" view toggle  (or host mounts with defaultView="week")
+    ▼
+[Loading]   ← fetches events for [weekStart, weekEnd] via host data adapter
+    │  data ready
+    ▼
+[Idle / Displaying]
+    ├─ user clicks time slot ──────────────────────▶ [CreatingEvent] (host create callback)
+    ├─ user clicks event ──────────────────────────▶ [ViewingEvent]  (host detail callback)
+    ├─ user drags event to new slot ───────────────▶ [DraggingEvent]
+    │       │  drop on valid slot
+    │       └──────────────────────────────────────▶ [Idle] (host update callback fired)
+    ├─ user clicks prev/next week arrow ───────────▶ [Loading]
+    └─ user clicks "Month" or "Day" toggle ────────▶ [Hidden]
+```
+
+```yaml probes:
+- id: probe-calendar-component-exists
+  target: slot
+  surface: calendar
+  description: "Verify that the calendar.main-view slot exists and can accept a replacement or augmentation view component."
+  check:
+    type: slot_exists
+    slot: calendar.main-view
+    accepts: [view, widget, panel]
+  on_fail: abort
+  message: "calendar.main-view slot not found. The week view has nowhere to mount. Ensure the host calendar surface exposes this slot."
+
+- id: probe-event-data-accessible
+  target: surface
+  surface: calendar
+  description: "Verify the host exposes an event/appointment query interface that returns at minimum: id, title, start (ISO 8601), end (ISO 8601)."
+  check:
+    type: data_interface
+    surface: calendar
+    required_fields:
+      - name: id
+        types: [string, integer]
+      - name: title
+        types: [string]
+      - name: start
+        types: [string]   # ISO 8601
+      - name: end
+        types: [string]   # ISO 8601
+    optional_fields:
+      - name: color
+      - name: all_day
+      - name: recurrence_rule
+  on_fail: warn
+  message: "Event data interface is incomplete. The week view will render but may show placeholder titles. Provide id/title/start/end for full functionality."
+
+- id: probe-dashboard-slot-optional
+  target: slot
+  surface: dashboard
+  description: "Optionally verify a dashboard.calendar-preview slot exists for embedding a compact week view widget in the dashboard."
+  check:
+    type: slot_exists
+    slot: dashboard.calendar-preview
+    accepts: [widget]
+  on_fail: skip
+  message: "dashboard.calendar-preview slot not found — mini week view widget on dashboard will be skipped. Core calendar functionality unaffected."
+```
+
+```yaml ncv:
+- id: no-utc-assumption
+  constraint: "The week view MUST NOT assume UTC when rendering event times. All datetime values must be passed through Intl.DateTimeFormat with an explicit timezone before display. Rendering a UTC time as local time is a silent data corruption bug."
+  enforcement: static_analysis
+  patterns:
+    - language: javascript
+      forbidden_patterns:
+        - "new Date\\(.*\\)\\.toTimeString\\(\\)"      # loses timezone context
+        - "\\.toLocaleDateString\\(\\)(?!.*timeZone)"   # no timeZone option
+  severity: high
+
+- id: no-dom-event-memory-leak
+  constraint: "All event listeners attached during component mount (resize, drag, scroll) MUST be removed on component unmount. Memory leaks from calendar grids are a common performance regression in SPAs."
+  enforcement: contract
+  check:
+    lifecycle_pairs:
+      - mount: addEventListener
+        unmount: removeEventListener
+      - mount: IntersectionObserver
+        unmount: observer.disconnect
+  severity: medium
+
+- id: no-layout-thrash
+  constraint: "The time-grid rendering loop MUST NOT interleave DOM reads and writes. All position calculations must be batched before any style mutations to avoid layout thrashing on grids with many events."
+  enforcement: guideline
+  severity: low
+```
+
+```yaml fixtures:
+- id: sample_events_week
+  type: static
+  description: "A realistic set of calendar events covering a full work week, including overlapping events, all-day events, and multi-day spans."
+  data:
+    - id: "evt_001"
+      title: "Team Standup"
+      start: "2026-04-20T09:00:00"
+      end: "2026-04-20T09:30:00"
+      color: "#4f46e5"
+      recurrence_rule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+    - id: "evt_002"
+      title: "Product Review"
+      start: "2026-04-21T14:00:00"
+      end: "2026-04-21T15:30:00"
+      color: "#0891b2"
+    - id: "evt_003"
+      title: "Company Offsite"
+      start: "2026-04-22"
+      end: "2026-04-24"
+      all_day: true
+      color: "#16a34a"
+    - id: "evt_004"
+      title: "1:1 with Manager"
+      start: "2026-04-22T11:00:00"
+      end: "2026-04-22T11:30:00"
+      color: "#dc2626"
+    - id: "evt_005"
+      title: "Deep Work Block"
+      start: "2026-04-23T09:00:00"
+      end: "2026-04-23T12:00:00"
+      color: "#9333ea"
+
+- id: overlapping_events
+  type: static
+  description: "Two events at the same time to verify overlap/column-split rendering."
+  data:
+    - id: "evt_overlap_a"
+      title: "Interview: Alice"
+      start: "2026-04-21T10:00:00"
+      end: "2026-04-21T11:00:00"
+    - id: "evt_overlap_b"
+      title: "Interview: Bob"
+      start: "2026-04-21T10:30:00"
+      end: "2026-04-21T11:30:00"
+
+- id: dst_boundary_events
+  type: static
+  description: "Events crossing a DST boundary to verify timezone handling correctness."
+  data:
+    - id: "evt_dst"
+      title: "DST Boundary Meeting"
+      start: "2026-03-08T01:30:00-05:00"
+      end: "2026-03-08T03:30:00-04:00"
+```
+
+```yaml contracts:
+- id: contract-renders-7-days
+  description: "The week view renders exactly 7 day columns for the current week, with columns labeled with the correct day name and date, starting on the locale-appropriate first day of the week (Sunday for en-US, Monday for most of Europe)."
+  given:
+    fixture: sample_events_week
+    locale: "en-US"
+    reference_date: "2026-04-20"
+  when:
+    action: mount WeekView
+    props:
+      referenceDate: "2026-04-20"
+      locale: "en-US"
+  then:
+    - rendered.day_columns.count: 7
+    - rendered.day_columns[0].label: "Sun Apr 19"
+    - rendered.day_columns[1].label: "Mon Apr 20"
+    - rendered.day_columns[6].label: "Sat Apr 25"
+    - rendered.aria_role: "grid"
+
+- id: contract-events-display-correctly
+  description: "Events from the data adapter appear in the correct day column, positioned proportionally to their start/end times within the 24-hour grid. Overlapping events split into side-by-side columns within the same day."
+  given:
+    fixture: overlapping_events
+    reference_date: "2026-04-21"
+  when:
+    action: mount WeekView
+    props:
+      referenceDate: "2026-04-21"
+  then:
+    - rendered.events.count: 2
+    - rendered.events["evt_overlap_a"].day_column: 2   # Tuesday (0-indexed from Sunday)
+    - rendered.events["evt_overlap_a"].overlap_column: 0
+    - rendered.events["evt_overlap_b"].overlap_column: 1
+    - rendered.events["evt_overlap_a"].top_percent: approximately(41.67)  # 10:00 / 24h
+    - rendered.events["evt_overlap_a"].height_percent: approximately(4.17) # 1h / 24h
+
+- id: contract-timezone-offsets-apply
+  description: "Events are rendered in the user's display timezone, not UTC. A UTC event starting at 15:00 UTC displays at 11:00 in America/New_York (UTC-4)."
+  given:
+    data:
+      - id: "tz_test"
+        title: "UTC Noon Meeting"
+        start: "2026-04-21T15:00:00Z"
+        end: "2026-04-21T16:00:00Z"
+  when:
+    action: mount WeekView
+    props:
+      displayTimezone: "America/New_York"
+  then:
+    - rendered.events["tz_test"].displayed_start_time: "11:00 AM"
+    - rendered.events["tz_test"].displayed_end_time: "12:00 PM"
+    - rendered.events["tz_test"].day_column_date: "Apr 21"
+
+- id: contract-drag-drop-fires-callback
+  description: "Dragging an event to a new time slot fires the host's onEventUpdate callback with the new start and end times. The UI optimistically moves the event before the callback resolves."
+  given:
+    fixture: sample_events_week
+  when:
+    action: drag
+    event_id: "evt_002"
+    from_slot: "2026-04-21T14:00"
+    to_slot: "2026-04-22T10:00"
+  then:
+    - ui.event["evt_002"].day_column: 3   # Wednesday (optimistic)
+    - callback.onEventUpdate.called_with:
+        id: "evt_002"
+        start: "2026-04-22T10:00:00"
+        end: "2026-04-22T11:30:00"   # duration preserved: 90 min
+```
+
+```yaml interfaces:
+- id: week_view_props
+  description: "Primary component interface. The host mounts <WeekView> into the calendar.main-view slot and provides these props."
+  type: component_props
+  props:
+    referenceDate:
+      type: string
+      format: "YYYY-MM-DD"
+      required: false
+      default: "today"
+      description: "Any date within the week to display. The view calculates weekStart and weekEnd from this."
+    events:
+      type: array
+      required: false
+      description: "Direct event injection. If omitted, the component calls onFetchEvents instead."
+      items:
+        id: string
+        title: string
+        start: string   # ISO 8601
+        end: string     # ISO 8601
+        color: string   # optional hex
+        all_day: boolean
+    onFetchEvents:
+      type: function
+      required: false
+      description: "Async callback: (weekStart: string, weekEnd: string) => Promise<Event[]>. Called on mount and week navigation."
+    onEventCreate:
+      type: function
+      required: false
+      description: "Called when user clicks an empty time slot: (start: string, end: string) => void"
+    onEventClick:
+      type: function
+      required: false
+      description: "Called when user clicks an existing event: (event: Event) => void"
+    onEventUpdate:
+      type: function
+      required: false
+      description: "Called after drag-and-drop: (id: string, start: string, end: string) => void"
+    displayTimezone:
+      type: string
+      required: false
+      default: "browser local"
+      description: "IANA timezone string (e.g. 'America/New_York'). Overrides browser timezone."
+    firstDayOfWeek:
+      type: integer
+      required: false
+      default: 0
+      description: "0 = Sunday, 1 = Monday. Overrides locale default."
+    hourStart:
+      type: integer
+      required: false
+      default: 0
+      description: "First visible hour in the grid (0-23). Useful for business-hours-only calendars."
+    hourEnd:
+      type: integer
+      required: false
+      default: 24
+      description: "Last visible hour in the grid (1-24)."
+
+- id: event_data_adapter
+  description: "Minimal event shape the host's data layer must conform to. Extra fields are passed through to event click/update callbacks."
+  type: data_schema
+  required_fields:
+    id:
+      type: [string, integer]
+    title:
+      type: string
+    start:
+      type: string
+      format: ISO-8601
+    end:
+      type: string
+      format: ISO-8601
+  optional_fields:
+    all_day:
+      type: boolean
+      default: false
+    color:
+      type: string
+      format: "#RRGGBB or CSS color"
+    recurrence_rule:
+      type: string
+      format: RFC-5545 RRULE
+    description:
+      type: string
+    location:
+      type: string
+```

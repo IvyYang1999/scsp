@@ -1,0 +1,233 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scsp.dev/schemas/host-snapshot/0.1",
+  "title": "SCSP Host Snapshot",
+  "description": "Validates host-snapshot.json — an agent-generated snapshot of a host application's current SCSP surface state. The snapshot is produced by static analysis of the host codebase and acts as a ground-truth input for capability package installation decisions. It captures the realised state of surfaces, anchors, and installed capabilities at a point in time.",
+  "type": "object",
+  "required": [
+    "scsp_host_snapshot",
+    "generated_at",
+    "generated_by",
+    "manifest_ref",
+    "manifest_version",
+    "snapshot_hash",
+    "base_version_hash",
+    "entities",
+    "ui_slots",
+    "logic_hooks",
+    "installed_capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "scsp_host_snapshot": {
+      "type": "string",
+      "description": "The version of the scsp-host-snapshot specification this file conforms to, in semver format.",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "examples": ["0.1.0"]
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "The ISO 8601 UTC datetime at which this snapshot was generated. Used to detect staleness — installers should warn if the snapshot is significantly older than the current time.",
+      "format": "date-time",
+      "examples": ["2024-06-15T09:30:00Z"]
+    },
+    "generated_by": {
+      "type": "string",
+      "description": "A string identifying the tool and version that generated this snapshot, in '<tool-name>/<version>' format. Allows installers to assess the reliability and analysis depth of the snapshot.",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$",
+      "examples": ["claude-code/2.1", "scsp-scanner/0.4.2", "cursor-agent/1.0"]
+    },
+    "manifest_ref": {
+      "type": "string",
+      "description": "The filename (relative to the repository root) of the scsp-manifest.yaml file this snapshot was generated against.",
+      "minLength": 1,
+      "examples": ["scsp-manifest.yaml", ".scsp/manifest.yaml"]
+    },
+    "manifest_version": {
+      "type": "string",
+      "description": "The version string from the scsp-manifest.yaml this snapshot was generated against. Used to detect manifest drift — if the manifest version changes, the snapshot should be regenerated.",
+      "minLength": 1,
+      "examples": ["0.1.0", "0.2.1"]
+    },
+    "snapshot_hash": {
+      "type": "string",
+      "description": "A SHA-256 content hash of the normalised snapshot payload (excluding this field), prefixed with 'sha256:'. Used for tamper detection and cache invalidation.",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "examples": ["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]
+    },
+    "base_version_hash": {
+      "type": "string",
+      "description": "A reference to the exact version of the host codebase that was analysed to produce this snapshot, prefixed with 'git:' followed by the full 40-character commit SHA. Allows installers to detect whether the codebase has changed since the snapshot was taken.",
+      "pattern": "^git:[0-9a-f]{40}$",
+      "examples": ["git:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"]
+    },
+    "entities": {
+      "type": "array",
+      "description": "The data entities detected in the host codebase by static analysis. Each entry corresponds to a domain object (e.g. database table, ORM model) and captures its current fields and extensibility.",
+      "items": {
+        "type": "object",
+        "description": "A detected data entity in the host codebase.",
+        "required": ["id", "fields", "location_hint", "extensible"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The entity's identifier, matching the corresponding surface or entity anchor id declared in scsp-manifest.yaml. Typically matches the ORM class name or database table name.",
+            "minLength": 1,
+            "examples": ["User", "Organization", "Invoice"]
+          },
+          "fields": {
+            "type": "array",
+            "description": "The list of field names currently present on this entity, as detected by static analysis (e.g. columns in a schema file, attributes on a model class).",
+            "items": {
+              "type": "string",
+              "description": "A field name.",
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "uniqueItems": true,
+            "examples": [["id", "email", "name", "created_at", "updated_at", "stripe_customer_id"]]
+          },
+          "location_hint": {
+            "type": "string",
+            "description": "A relative file path (from the repository root) pointing to the primary definition of this entity — typically the model file, schema file, or migration that defines its fields. Helps agents locate the correct file for code insertion.",
+            "minLength": 1,
+            "examples": ["app/models/user.rb", "prisma/schema.prisma#User", "db/schema.rb"]
+          },
+          "extensible": {
+            "type": "boolean",
+            "description": "If true, the snapshot analyser has determined that this entity can accept additional fields from capability packages without requiring structural changes to the host codebase (e.g. the schema supports nullable columns or there is a JSONB extensions column)."
+          }
+        }
+      }
+    },
+    "ui_slots": {
+      "type": "array",
+      "description": "The UI slot anchor points detected in the host codebase. Each entry represents a concrete mount point where capability packages can render components.",
+      "items": {
+        "type": "object",
+        "description": "A detected UI slot in the host codebase.",
+        "required": ["id", "framework", "location_hint", "mount_type"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The slot's identifier, matching the corresponding slot anchor id declared in scsp-manifest.yaml.",
+            "minLength": 1,
+            "examples": ["settings::billing-section", "nav::user-menu-items"]
+          },
+          "framework": {
+            "type": "string",
+            "description": "The UI framework used at this slot (e.g. 'react', 'vue', 'svelte', 'erb', 'liquid'). Determines what kind of component a capability package must provide.",
+            "minLength": 1,
+            "examples": ["react", "vue", "svelte", "erb", "liquid"]
+          },
+          "location_hint": {
+            "type": "string",
+            "description": "A relative file path (optionally with a line number or component name fragment) pointing to where the slot is defined in the host codebase. Helps agents locate the exact insertion point.",
+            "minLength": 1,
+            "examples": [
+              "app/javascript/pages/Settings/BillingSection.tsx",
+              "app/views/settings/_billing.html.erb:42",
+              "components/layout/Nav.tsx#UserMenuItems"
+            ]
+          },
+          "mount_type": {
+            "type": "string",
+            "description": "The mechanism by which capability packages attach components to this slot. 'inject' means the host component tree is modified to include the new component. 'portal' means the component is rendered into a React/Vue portal. 'replace' means the capability component fully replaces the host's default content. 'append' means the component is appended after existing content. 'prepend' means the component is prepended before existing content.",
+            "enum": ["inject", "portal", "replace", "append", "prepend"]
+          }
+        }
+      }
+    },
+    "logic_hooks": {
+      "type": "array",
+      "description": "The lifecycle hook anchor points detected in the host codebase. Each entry represents a callsite where the host invokes registered hook subscribers.",
+      "items": {
+        "type": "object",
+        "description": "A detected lifecycle hook in the host codebase.",
+        "required": ["id", "location_hint", "signature_hint", "lang"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The hook's identifier, matching the corresponding hook anchor id declared in scsp-manifest.yaml.",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "examples": ["after_user_created", "before_invoice_sent"]
+          },
+          "location_hint": {
+            "type": "string",
+            "description": "A relative file path (optionally with a line number) pointing to the primary dispatch callsite for this hook in the host codebase.",
+            "minLength": 1,
+            "examples": [
+              "app/models/user.rb:54",
+              "app/services/billing/invoice_service.ts:121"
+            ]
+          },
+          "signature_hint": {
+            "type": "string",
+            "description": "A human-readable description of the arguments passed to hook subscribers at runtime. Helps code generators produce correctly typed handler functions.",
+            "minLength": 1,
+            "examples": [
+              "(user: User) => Promise<void>",
+              "(invoice: Invoice, context: BillingContext) => void",
+              "({ user_id:, event: }) => nil"
+            ]
+          },
+          "lang": {
+            "type": "string",
+            "description": "The programming language of the hook callsite and expected subscriber implementations (e.g. 'typescript', 'ruby', 'python', 'go'). Used by code generators to produce language-appropriate handler stubs.",
+            "minLength": 1,
+            "examples": ["typescript", "ruby", "python", "go", "elixir"]
+          }
+        }
+      }
+    },
+    "installed_capabilities": {
+      "type": "array",
+      "description": "The list of SCSP capability packages that have already been applied to this host codebase at the time the snapshot was generated. Used by the installer to detect conflicts, enforce upgrade paths, and prevent duplicate installation.",
+      "items": {
+        "type": "object",
+        "description": "A record of a single installed capability package.",
+        "required": ["id", "version", "installed_at", "components_applied"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The capability package id, matching the 'id' field in the package's frontmatter.",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "examples": ["stripe-billing", "dark-mode-toggle", "audit-log"]
+          },
+          "version": {
+            "type": "string",
+            "description": "The exact semver version of the capability package that was installed.",
+            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+            "examples": ["1.0.0", "0.3.1-beta.2"]
+          },
+          "installed_at": {
+            "type": "string",
+            "description": "The ISO 8601 UTC datetime at which this capability package was applied to the host codebase.",
+            "format": "date-time",
+            "examples": ["2024-06-10T14:22:00Z"]
+          },
+          "components_applied": {
+            "type": "array",
+            "description": "The list of component ids from the capability package that were actually applied during installation. May be a subset of the package's full component list if optional components were skipped.",
+            "items": {
+              "type": "string",
+              "description": "A component id from the installed capability package.",
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9-]*$"
+            },
+            "uniqueItems": true,
+            "minItems": 1,
+            "examples": [["stripe-webhook-handler", "billing-ui-panel", "subscription-entity-extension"]]
+          }
+        }
+      }
+    }
+  }
+}

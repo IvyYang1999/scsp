@@ -1,0 +1,389 @@
+scsp-manifest: "0.1"
+name: "My Express App"
+version: "1.0.0"
+
+# ─────────────────────────────────────────────
+# SURFACES
+# The logical areas this application exposes for
+# capability installation. Capabilities declare
+# which surfaces they touch; the installer uses
+# this to validate compatibility.
+# ─────────────────────────────────────────────
+surfaces:
+  entities:
+    - User
+    - Post
+    - Comment
+    - Session
+    - Notification
+
+  ui_areas:
+    - settings
+    - dashboard
+    - nav
+    - profile
+    - documents
+    - calendar
+    - auth
+
+  logic_domains:
+    - auth
+    - notification
+    - payment
+    - content
+    - analytics
+
+# ─────────────────────────────────────────────
+# ANCHORS
+# Named extension points — hooks for injecting
+# behavior into the request lifecycle, slots for
+# injecting UI components, and entity anchors
+# documenting the core shape of data models.
+# ─────────────────────────────────────────────
+anchors:
+  hooks:
+    - id: auth.password_login.post_verify
+      description: >
+        Fires after a user's password is confirmed correct but before the
+        session is created. Returning a { redirect } object short-circuits
+        the normal session creation and sends the user to the given path
+        (used for 2FA challenge step). Returning null continues normally.
+      location: src/middleware/auth.js
+      receives:
+        - user_id: string
+        - session_context:
+            ip: string
+            user_agent: string
+            timestamp: string
+      can_short_circuit: true
+      short_circuit_shape:
+        redirect: string
+        reason: string
+
+    - id: auth.logout.pre_destroy
+      description: >
+        Fires before the session is destroyed on logout. Useful for
+        cleanup tasks (invalidating 2FA state, revoking tokens, etc).
+      location: src/middleware/auth.js
+      receives:
+        - user_id: string
+        - session_id: string
+      can_short_circuit: false
+
+    - id: document.save.post_write
+      description: >
+        Fires after a document/post is written to the database. Receives
+        the full document record and a changeset describing what fields
+        changed. Can short-circuit to return an error (e.g. workflow lock
+        rejection).
+      location: src/routes/documents.js
+      receives:
+        - document_id: string
+        - actor_id: string
+        - changeset: object
+      can_short_circuit: true
+      short_circuit_shape:
+        error: string
+        status_code: integer
+
+    - id: notification.send.pre_dispatch
+      description: >
+        Fires before any notification (email, push, in-app) is dispatched.
+        Can be used to filter, transform, or enrich notification payloads.
+        Returning null suppresses the notification.
+      location: src/services/notification.js
+      receives:
+        - notification_type: string
+        - recipient_id: string
+        - payload: object
+      can_short_circuit: true
+      short_circuit_shape:
+        suppress: boolean
+
+    - id: render.image.pre_output
+      description: >
+        Fires when any image element is about to be rendered. Receives the
+        img props object and must return the (optionally modified) props.
+        Used by performance capabilities to inject lazy loading attributes.
+      location: src/components/Image.jsx
+      receives:
+        - props:
+            src: string
+            alt: string
+            width: integer
+            height: integer
+        - render_context:
+            is_ssr: boolean
+            viewport_hint: string
+      returns: props
+
+  slots:
+    - id: settings.security
+      description: >
+        Panel slot in the user Settings page, Security section. Accepts
+        card or panel components. Renders below the "Change Password" card.
+      location: src/pages/Settings.jsx
+      accepts: [panel, card]
+      layout: stacked
+      max_components: 3
+
+    - id: settings.profile
+      description: >
+        Panel slot in the user Settings page, Profile section.
+      location: src/pages/Settings.jsx
+      accepts: [panel, card, form-section]
+      layout: stacked
+
+    - id: dashboard.pending-actions
+      description: >
+        Widget slot in the main Dashboard for surfacing items requiring
+        user attention (pending approvals, expiring items, etc). Renders
+        in the right sidebar.
+      location: src/pages/Dashboard.jsx
+      accepts: [widget]
+      layout: stacked
+      max_components: 5
+
+    - id: dashboard.calendar-preview
+      description: >
+        Widget slot for a compact calendar or schedule preview on the
+        dashboard. Renders in the main content area, below the activity feed.
+      location: src/pages/Dashboard.jsx
+      accepts: [widget]
+      layout: single
+      max_components: 1
+
+    - id: documents.action-bar
+      description: >
+        Action button slot in the document detail view's top action bar.
+        Accepts button or button-group components.
+      location: src/pages/DocumentDetail.jsx
+      accepts: [button, button-group, menu]
+      layout: horizontal
+
+    - id: documents.detail.sidebar
+      description: >
+        Sidebar panel slot in the document detail view, rendered to the
+        right of the document content.
+      location: src/pages/DocumentDetail.jsx
+      accepts: [panel, card]
+      layout: stacked
+
+    - id: calendar.main-view
+      description: >
+        Primary view slot in the Calendar page. Capabilities can inject
+        view modes (week, agenda, timeline) that appear as toggle options
+        alongside any existing month/day views.
+      location: src/pages/Calendar.jsx
+      accepts: [view, widget]
+      layout: replace-or-tab
+      max_components: 4
+
+    - id: nav.user-menu
+      description: >
+        Slot for additional items in the authenticated user's dropdown menu
+        in the top navigation bar.
+      location: src/components/Nav.jsx
+      accepts: [menu-item]
+      layout: list
+      max_components: 6
+
+  entities:
+    - id: User
+      description: "Authenticated user account."
+      location: src/models/User.js
+      core_fields:
+        - name: id
+          type: uuid
+          nullable: false
+          primary_key: true
+        - name: email
+          type: string
+          nullable: false
+          unique: true
+        - name: password_hash
+          type: string
+          nullable: true
+          description: "bcrypt hash. Null for OAuth-only accounts."
+        - name: role
+          type: enum
+          values: [user, editor, manager, admin]
+          default: user
+        - name: created_at
+          type: timestamp
+          nullable: false
+        - name: updated_at
+          type: timestamp
+          nullable: false
+
+    - id: Post
+      description: "User-authored content post or document."
+      location: src/models/Post.js
+      core_fields:
+        - name: id
+          type: uuid
+          nullable: false
+          primary_key: true
+        - name: title
+          type: string
+          nullable: false
+        - name: content
+          type: text
+          nullable: true
+        - name: author_id
+          type: uuid
+          foreign_key: User.id
+          nullable: false
+        - name: status
+          type: enum
+          values: [draft, published, archived]
+          default: draft
+        - name: published_at
+          type: timestamp
+          nullable: true
+        - name: created_at
+          type: timestamp
+        - name: updated_at
+          type: timestamp
+
+    - id: Comment
+      description: "Comment on a Post."
+      location: src/models/Comment.js
+      core_fields:
+        - name: id
+          type: uuid
+          primary_key: true
+        - name: post_id
+          type: uuid
+          foreign_key: Post.id
+        - name: author_id
+          type: uuid
+          foreign_key: User.id
+        - name: body
+          type: text
+          nullable: false
+        - name: created_at
+          type: timestamp
+
+# ─────────────────────────────────────────────
+# HINTS
+# Architecture and convention hints that help
+# the SCSP agent understand where to put things
+# and how to follow existing patterns.
+# ─────────────────────────────────────────────
+hints:
+  architecture:
+    description: "Express.js REST API with Prisma ORM, PostgreSQL database, and a React SPA frontend served from /public."
+    backend:
+      framework: express
+      version: "^4.18"
+      entry: src/app.js
+      port_env_var: PORT
+    database:
+      orm: prisma
+      dialect: postgresql
+      schema_file: prisma/schema.prisma
+      migrations_dir: prisma/migrations
+      connection_env_var: DATABASE_URL
+    frontend:
+      framework: react
+      version: "^18"
+      bundler: vite
+      entry: src/client/main.jsx
+      build_output: public/dist
+    auth:
+      strategy: jwt
+      token_env_var: JWT_SECRET
+      session_table: sessions
+
+  conventions:
+    routes:
+      pattern: "src/routes/{domain}.js"
+      examples:
+        - src/routes/auth.js
+        - src/routes/users.js
+        - src/routes/posts.js
+      router_registration: "src/app.js (app.use('/api', router))"
+
+    models:
+      pattern: "src/models/{Entity}.js"
+      orm_access: "Use Prisma client: import { prisma } from '../lib/prisma'"
+      migration_command: "npx prisma migrate dev --name {migration_name}"
+
+    components:
+      pattern: "src/client/components/{ComponentName}.jsx"
+      shared_ui: "src/client/components/ui/"
+      pages: "src/client/pages/{PageName}.jsx"
+      styling: "Tailwind CSS utility classes. Config: tailwind.config.js"
+
+    tests:
+      backend:
+        runner: jest
+        pattern: "src/**/*.test.js"
+        command: "npm test"
+        db_strategy: "Separate test database via DATABASE_URL_TEST env var"
+      frontend:
+        runner: vitest
+        pattern: "src/client/**/*.test.jsx"
+
+    environment:
+      required_vars:
+        - DATABASE_URL
+        - JWT_SECRET
+        - PORT
+      optional_vars:
+        - SENDGRID_API_KEY
+        - STRIPE_SECRET_KEY
+        - REDIS_URL
+      env_file: ".env (gitignored). Template: .env.example"
+
+    error_handling:
+      format:
+        error: string
+        message: string
+        status_code: integer
+      middleware: "src/middleware/errorHandler.js"
+
+    logging:
+      library: pino
+      format: json
+      import: "import { logger } from './lib/logger'"
+
+# ─────────────────────────────────────────────
+# EXTERNAL DEPENDENCIES
+# Third-party services the app already integrates.
+# Capabilities can reference these to avoid
+# adding a second payment/email provider.
+# ─────────────────────────────────────────────
+external_dependencies:
+  - id: stripe-api
+    name: "Stripe Payment Processing"
+    service: stripe
+    sdk: stripe-node
+    version: "^14"
+    env_vars:
+      - STRIPE_SECRET_KEY
+      - STRIPE_WEBHOOK_SECRET
+    surfaces: [payment]
+    documentation: "https://stripe.com/docs/api"
+
+  - id: sendgrid-api
+    name: "SendGrid Transactional Email"
+    service: sendgrid
+    sdk: "@sendgrid/mail"
+    version: "^7"
+    env_vars:
+      - SENDGRID_API_KEY
+      - SENDGRID_FROM_EMAIL
+    surfaces: [notification]
+    documentation: "https://docs.sendgrid.com"
+
+  - id: cloudinary
+    name: "Cloudinary Image CDN"
+    service: cloudinary
+    sdk: cloudinary
+    version: "^1"
+    env_vars:
+      - CLOUDINARY_URL
+    surfaces: [content]
+    documentation: "https://cloudinary.com/documentation"

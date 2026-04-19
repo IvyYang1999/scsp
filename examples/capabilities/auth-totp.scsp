@@ -1,0 +1,404 @@
+---
+scsp: "0.1"
+id: auth-totp-v1
+name: "TOTP Two-Factor Authentication"
+version: "1.0.0"
+tags: ["auth", "security", "2fa"]
+
+author:
+  name: alice
+  key: "ed25519:MCowBQYDK2VwAyEA4k7jBKJFvF2xRqmH9pLnZdTsWuIoYeCgXbNvPqRsT3U="
+signature: "ed25519:3d9f2a1b8c4e7f0a2d5e8b1c4f7a0d3e6b9c2f5a8d1e4b7c0f3a6d9e2b5c8f1a4d7e0b3c6f9a2d5e8b1c4f7"
+created: "2026-04-01T12:00:00Z"
+revoked: false
+
+env_hint:
+  runtime:
+    - "node>=18"
+    - "python>=3.10"
+    - "go>=1.21"
+  frameworks:
+    - express
+    - fastapi
+    - gin
+    - nextjs
+
+requires:
+  manifest_version: ">=0.1"
+  surfaces:
+    entities:
+      - User
+    logic_domains:
+      - auth
+    ui_areas:
+      - settings
+  anchors:
+    hooks:
+      - auth.password_login.post_verify
+    slots:
+      - settings.security
+    entities:
+      - User
+
+components:
+  - id: totp-backend
+    layer: module
+    optional: false
+    surfaces_touched:
+      - auth
+      - User
+    anchors_used:
+      - auth.password_login.post_verify
+      - User
+    blast_radius:
+      structural_impact:
+        - Route
+        - Middleware
+        - DatabaseSchema
+      dependency_depth: 2
+    rollback:
+      stateless: snapshot-based
+      stateful:
+        - type: schema_migration
+          down: >
+            ALTER TABLE users DROP COLUMN IF EXISTS totp_secret;
+            ALTER TABLE users DROP COLUMN IF EXISTS totp_enabled;
+            DROP TABLE IF EXISTS recovery_codes;
+    permissions:
+      surfaces_writable:
+        - auth
+        - User
+      schema_migration: true
+      external_deps:
+        - otplib
+        - pyotp
+        - otp
+
+  - id: totp-settings-ui
+    layer: component
+    optional: true
+    depends_on:
+      - totp-backend
+    surfaces_touched:
+      - settings
+    anchors_used:
+      - settings.security
+    blast_radius:
+      structural_impact:
+        - UI
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - settings
+
+conflicts:
+  - id: auth-passwordless-v1
+    surfaces_overlap:
+      - auth
+    anchors_overlap:
+      - auth.password_login.post_verify
+    reason: "Both modify login flow entry point — simultaneous installation would create a double-intercept on post_verify, making the auth chain ambiguous."
+
+risk_factors:
+  auto_derived: true
+  additional: []
+---
+
+## Intent
+
+TOTP Two-Factor Authentication adds RFC 6238-compliant time-based one-time password support to the host application's login flow. Once enabled, users who have activated 2FA must supply a valid 6-digit code from an authenticator app (Google Authenticator, Authy, 1Password, etc.) immediately after correct password entry.
+
+**Motivation.** Password-only authentication is a single point of failure. TOTP is the most widely deployed second factor that requires no third-party infrastructure, making it appropriate for self-hosted and privacy-sensitive deployments.
+
+**Design principles.**
+- OWASP ASVS 2.8 compliance: secrets stored encrypted at rest (AES-256-GCM), never returned in API responses after initial setup.
+- Recovery codes: ten single-use codes generated at enrollment, bcrypt-hashed in a dedicated table, consumed one-at-a-time so loss of device does not permanently lock out the account.
+- Brute-force resistance: five consecutive failures within a 10-minute window trigger a 30-minute soft lockout independent of the password lockout policy.
+- Constant-time comparison for all code validation paths to prevent timing side-channels.
+- QR code generation happens client-side from the returned `otpauth://` URI; the raw secret is never logged.
+
+**Behavior state machine.**
+```
+[Unenrolled]
+    │  POST /auth/2fa/enable
+    ▼
+[PendingVerification]   ← user scans QR, enters first code
+    │  POST /auth/2fa/verify-setup (valid code)
+    ▼
+[Enrolled]
+    │  login: password OK → POST /auth/2fa/challenge
+    ├─ valid code ──────────────────────────────────▶ [Authenticated]
+    ├─ recovery code ───────────────────────────────▶ [Authenticated] (code consumed)
+    ├─ invalid code (< 5 attempts) ─────────────────▶ [AwaitingCode]
+    └─ invalid code (≥ 5 attempts) ─────────────────▶ [SoftLocked 30 min]
+    │  POST /auth/2fa/disable (requires fresh TOTP)
+    ▼
+[Unenrolled]
+```
+
+```yaml probes:
+- id: probe-user-model-exists
+  target: entity
+  surface: User
+  description: "Verify the User entity exists and exposes at minimum an id and email field."
+  check:
+    type: entity_fields
+    entity: User
+    required_fields:
+      - name: id
+        types: [string, uuid, integer]
+      - name: email
+        types: [string]
+  on_fail: abort
+  message: "User entity not found or missing required fields (id, email). This capability cannot be installed without a User model."
+
+- id: probe-password-login-hook
+  target: hook
+  surface: auth
+  description: "Verify that the auth.password_login.post_verify hook exists and can accept middleware insertion."
+  check:
+    type: hook_exists
+    hook: auth.password_login.post_verify
+    hook_signature:
+      receives: [user_id, session_context]
+      can_short_circuit: true
+  on_fail: abort
+  message: "The post_verify hook on the password login flow is absent. TOTP interception requires this hook to redirect users to the 2FA challenge step."
+
+- id: probe-security-ui-slot
+  target: slot
+  surface: settings
+  description: "Verify the settings.security UI slot is present so the TOTP setup panel can be injected."
+  check:
+    type: slot_exists
+    slot: settings.security
+    accepts: [panel, card]
+  on_fail: warn
+  message: "settings.security slot not found — the totp-settings-ui component will be skipped. Backend TOTP enforcement will still be installed."
+```
+
+```yaml ncv:
+- id: no-plaintext-secret
+  constraint: "TOTP secrets MUST be stored encrypted at rest. Plaintext secrets in any persistence layer (database column, cache, log) are a critical violation."
+  enforcement: static_analysis
+  patterns:
+    - language: any
+      forbidden_patterns:
+        - "totp_secret.*=.*['\"]\\w{32}['\"]"   # raw base32 literal stored directly
+        - "INSERT.*totp_secret.*VALUES"           # raw INSERT without encryption call
+    - language: python
+      required_pattern_near: ["encrypt\\(", "Fernet\\(", "AES\\.new\\("]
+      when_present: ["totp_secret"]
+  severity: critical
+
+- id: no-external-credential-leak
+  constraint: "The otpauth:// URI (which contains the raw secret) MUST NOT be logged, stored in analytics, or sent to external services. It is single-use display material."
+  enforcement: runtime_contract
+  patterns:
+    - language: any
+      forbidden_in: [log statements, analytics payloads, error reporters]
+      pattern: "otpauth://"
+  severity: critical
+
+- id: no-auth-bypass
+  constraint: "Routes protected by 2FA MUST NOT be reachable by a session that completed password authentication but has not yet passed the TOTP challenge. The session state 'totp_pending' must be treated as unauthenticated for all resource endpoints."
+  enforcement: contract
+  check:
+    middleware_order:
+      - requirePasswordAuth
+      - requireTOTPChallenge   # must come BEFORE requireAuthenticated
+      - requireAuthenticated
+  severity: high
+```
+
+```yaml fixtures:
+- id: valid_user
+  type: entity
+  entity: User
+  data:
+    id: "usr_test_001"
+    email: "alice@example.com"
+    password_hash: "$2b$12$KIXTn3F5eWJqZzVyU8Gq2OsbExP7qBnLdR4kWmTjYuHpCaDvNxIiS"
+    totp_enabled: false
+    totp_secret: null
+
+- id: valid_totp_code
+  type: generated
+  generator: totp_current
+  depends_on_fixture: test_secret
+  description: "Generates the current valid 6-digit TOTP code for test_secret at test execution time. Ensures time-sensitivity is handled correctly."
+
+- id: invalid_code
+  type: static
+  data:
+    code: "000000"
+  description: "A code that is statistically almost certainly invalid (probability 1/1,000,000) and should always fail validation in test environments."
+
+- id: test_secret
+  type: static
+  data:
+    secret: "JBSWY3DPEHPK3PXP"
+    algorithm: SHA1
+    digits: 6
+    period: 30
+  description: "Well-known test secret from RFC 6238 reference implementation. MUST NOT be used in production."
+```
+
+```yaml contracts:
+- id: contract-enable-2fa
+  description: "Enabling 2FA returns an otpauth:// URI and a list of recovery codes. The secret is stored encrypted. The account is NOT yet in Enrolled state until verify-setup succeeds."
+  given:
+    fixture: valid_user
+    user_has_2fa: false
+  when:
+    action: POST /auth/2fa/enable
+    authenticated_as: valid_user
+  then:
+    - response.status: 200
+    - response.body.otpauth_uri: matches("^otpauth://totp/")
+    - response.body.recovery_codes: length(10)
+    - response.body.recovery_codes[0]: matches("^[a-z0-9]{8}-[a-z0-9]{8}$")
+    - response.body.secret: absent   # raw secret never returned
+    - db.users.totp_enabled[valid_user]: false   # not enabled until verify-setup
+    - db.users.totp_secret[valid_user]: not_null  # but stored encrypted
+
+- id: contract-totp-verify-success
+  description: "Submitting a valid TOTP code during login challenge creates a fully authenticated session."
+  given:
+    fixture: valid_user
+    user_has_2fa: true
+    session_state: totp_pending
+  when:
+    action: POST /auth/2fa/challenge
+    body:
+      code: "{{ valid_totp_code }}"
+  then:
+    - response.status: 200
+    - session.state: authenticated
+    - session.totp_pending: false
+    - response.body.token: present
+    - audit_log: contains({event: "2fa_success", user_id: "usr_test_001"})
+
+- id: contract-lockout-after-5-failures
+  description: "Five consecutive invalid TOTP codes within 10 minutes trigger a 30-minute soft lockout. The sixth attempt is rejected with 429 even if the code would be valid."
+  given:
+    fixture: valid_user
+    user_has_2fa: true
+    session_state: totp_pending
+  when:
+    sequence:
+      - repeat: 5
+        action: POST /auth/2fa/challenge
+        body:
+          code: "{{ invalid_code }}"
+      - action: POST /auth/2fa/challenge
+        body:
+          code: "{{ valid_totp_code }}"
+  then:
+    - attempts[1..5].response.status: 401
+    - attempt[6].response.status: 429
+    - attempt[6].response.body.error: "too_many_attempts"
+    - attempt[6].response.headers.Retry-After: present
+    - audit_log: contains({event: "2fa_lockout", user_id: "usr_test_001"})
+
+- id: contract-recovery-code-single-use
+  description: "A recovery code authenticates the user successfully on first use and is rejected on any subsequent use."
+  given:
+    fixture: valid_user
+    user_has_2fa: true
+    recovery_code: "abcd1234-efgh5678"
+    session_state: totp_pending
+  when:
+    sequence:
+      - action: POST /auth/2fa/challenge
+        body:
+          recovery_code: "abcd1234-efgh5678"
+      - action: POST /auth/logout
+      - action: POST /auth/login
+        body: { email: valid_user.email, password: "correct" }
+      - action: POST /auth/2fa/challenge
+        body:
+          recovery_code: "abcd1234-efgh5678"
+  then:
+    - attempt[1].response.status: 200
+    - attempt[4].response.status: 401
+    - attempt[4].response.body.error: "recovery_code_already_used"
+    - db.recovery_codes[abcd1234-efgh5678].used_at: not_null
+```
+
+```yaml interfaces:
+- id: enable_2fa
+  description: "Initiate TOTP enrollment for the authenticated user. Returns the otpauth URI for QR display and hashed recovery codes."
+  method: POST
+  path: /auth/2fa/enable
+  auth_required: true
+  auth_state: [authenticated]   # must NOT be called from totp_pending
+  request_body: {}
+  response:
+    200:
+      otpauth_uri:
+        type: string
+        example: "otpauth://totp/MyApp:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=MyApp"
+      recovery_codes:
+        type: array
+        items: string
+        count: 10
+        example: ["a1b2c3d4-e5f6a7b8", "..."]
+    409:
+      error: "2fa_already_enabled"
+    401:
+      error: "unauthenticated"
+
+- id: verify_2fa_setup
+  description: "Confirm enrollment by submitting the first valid TOTP code. Transitions the account from PendingVerification to Enrolled."
+  method: POST
+  path: /auth/2fa/verify-setup
+  auth_required: true
+  auth_state: [authenticated]
+  request_body:
+    code:
+      type: string
+      pattern: "^[0-9]{6}$"
+      required: true
+  response:
+    200:
+      message: "2fa_enabled"
+      backup_codes_remaining: 10
+    400:
+      error: "invalid_code"
+    404:
+      error: "no_pending_enrollment"
+
+- id: validate_2fa_login
+  description: "Submit TOTP code or recovery code during the post-password login challenge. On success, upgrades the session from totp_pending to authenticated."
+  method: POST
+  path: /auth/2fa/challenge
+  auth_required: false
+  session_state_required: totp_pending
+  request_body:
+    code:
+      type: string
+      pattern: "^[0-9]{6}$"
+      required_if: recovery_code absent
+    recovery_code:
+      type: string
+      pattern: "^[a-z0-9]{8}-[a-z0-9]{8}$"
+      required_if: code absent
+  response:
+    200:
+      token:
+        type: string
+        description: "Full-session JWT or session cookie set"
+      recovery_codes_remaining:
+        type: integer
+        description: "Included only when a recovery code was used"
+    401:
+      error: "invalid_code | recovery_code_already_used | account_not_enrolled"
+    429:
+      error: "too_many_attempts"
+      retry_after_seconds:
+        type: integer
+```

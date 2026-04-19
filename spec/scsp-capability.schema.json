@@ -1,0 +1,426 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scsp.dev/schemas/capability/0.1",
+  "title": "SCSP Capability Package",
+  "description": "Validates the YAML frontmatter of a .scsp capability package file. A capability package describes a discrete unit of functionality that can be installed into a host application.",
+  "type": "object",
+  "required": ["scsp", "id", "name", "version", "author", "created", "requires", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "scsp": {
+      "type": "string",
+      "description": "The SCSP protocol version this package targets. Must begin with '0.' for the current pre-stable series.",
+      "pattern": "^0\\.",
+      "examples": ["0.1", "0.2"]
+    },
+    "id": {
+      "type": "string",
+      "description": "A globally unique, URL-safe identifier for this capability package. Must start with a lowercase letter and contain only lowercase letters, digits, and hyphens.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": ["dark-mode-toggle", "stripe-billing", "audit-log"]
+    },
+    "name": {
+      "type": "string",
+      "description": "A human-readable display name for this capability package.",
+      "minLength": 3,
+      "examples": ["Dark Mode Toggle", "Stripe Billing Integration"]
+    },
+    "version": {
+      "type": "string",
+      "description": "The semantic version of this capability package, following semver 2.0.0 (MAJOR.MINOR.PATCH with optional pre-release and build metadata).",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "examples": ["1.0.0", "0.3.1-beta.1", "2.1.0+build.42"]
+    },
+    "tags": {
+      "type": "array",
+      "description": "Optional free-form tags for categorisation and discoverability in registries.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "examples": [["ui", "theme", "accessibility"]]
+    },
+    "extends": {
+      "type": ["string", "null"],
+      "description": "The 'id' of a parent capability package that this package extends or specialises. Null if this is a standalone package.",
+      "examples": ["base-billing", null]
+    },
+    "parent_id": {
+      "type": ["string", "null"],
+      "description": "The resolved package id of the immediate parent in an inheritance chain, if applicable. Populated by the SCSP registry when 'extends' is resolved.",
+      "examples": ["base-billing", null]
+    },
+    "author": {
+      "type": "object",
+      "description": "Identity information for the capability package author, used for attribution and signature verification.",
+      "required": ["name", "key"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The display name of the author or publishing organisation.",
+          "minLength": 1,
+          "examples": ["Acme Corp", "Jane Smith"]
+        },
+        "key": {
+          "type": "string",
+          "description": "The author's Ed25519 public key in 'ed25519:<base64>' format, used to verify the package signature.",
+          "pattern": "^ed25519:[A-Za-z0-9+/]+=*$",
+          "examples": ["ed25519:AAAA...base64=="]
+        },
+        "url": {
+          "type": "string",
+          "description": "Optional URL for the author's website or profile.",
+          "format": "uri"
+        },
+        "email": {
+          "type": "string",
+          "description": "Optional contact email for the author.",
+          "format": "email"
+        }
+      }
+    },
+    "signature": {
+      "type": "string",
+      "description": "An Ed25519 signature over the canonical serialisation of this frontmatter (excluding the signature field itself), in 'ed25519:<base64>' format.",
+      "pattern": "^ed25519:[A-Za-z0-9+/]+=*$",
+      "examples": ["ed25519:BBBB...base64=="]
+    },
+    "created": {
+      "type": "string",
+      "description": "The ISO 8601 UTC datetime at which this package version was authored.",
+      "format": "date-time",
+      "examples": ["2024-06-01T12:00:00Z"]
+    },
+    "revoked": {
+      "type": "boolean",
+      "description": "If true, this package version has been revoked by its author and must not be installed. Defaults to false.",
+      "default": false
+    },
+    "env_hint": {
+      "type": "object",
+      "description": "Optional hints about the runtime environments and frameworks this package is compatible with. Used by registries and tooling for filtering; not enforced by the protocol.",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "type": "array",
+          "description": "List of runtime environments this package is compatible with (e.g. 'node', 'deno', 'bun', 'browser').",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "examples": [["node", "bun"]]
+        },
+        "frameworks": {
+          "type": "array",
+          "description": "List of application frameworks this package targets (e.g. 'nextjs', 'rails', 'django', 'laravel').",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "examples": [["nextjs", "remix"]]
+        }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "description": "Declares the host application requirements that must be satisfied before this package can be installed.",
+      "required": ["manifest_version", "surfaces", "anchors"],
+      "additionalProperties": false,
+      "properties": {
+        "manifest_version": {
+          "type": "string",
+          "description": "A semver range string (npm-compatible) specifying the required scsp-manifest version on the host.",
+          "minLength": 1,
+          "examples": ["^0.1.0", ">=0.1.0 <0.3.0"]
+        },
+        "surfaces": {
+          "type": "object",
+          "description": "Declares the host surfaces this package requires access to. All sub-fields are optional arrays of surface identifiers.",
+          "additionalProperties": false,
+          "properties": {
+            "entities": {
+              "type": "array",
+              "description": "Data entity surfaces the package needs to read or write (e.g. 'User', 'Order').",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true,
+              "examples": [["User", "Subscription"]]
+            },
+            "logic_domains": {
+              "type": "array",
+              "description": "Business logic domains the package interacts with (e.g. 'billing', 'auth', 'notifications').",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true,
+              "examples": [["billing", "notifications"]]
+            },
+            "ui_areas": {
+              "type": "array",
+              "description": "UI areas or regions the package renders into (e.g. 'settings-page', 'nav-bar', 'dashboard-sidebar').",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true,
+              "examples": [["settings-page", "nav-bar"]]
+            }
+          }
+        },
+        "anchors": {
+          "type": "object",
+          "description": "Specific named anchor points on the host that this package binds to. Anchors are stable, versioned extension points declared in the host manifest.",
+          "additionalProperties": false,
+          "properties": {
+            "hooks": {
+              "type": "array",
+              "description": "Lifecycle hook identifiers the package subscribes to (e.g. 'after_user_created', 'before_payment_processed').",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true,
+              "examples": [["after_user_created", "before_payment_processed"]]
+            },
+            "slots": {
+              "type": "array",
+              "description": "UI slot identifiers the package mounts components into (e.g. 'settings::billing-section', 'nav::user-menu').",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true,
+              "examples": [["settings::billing-section"]]
+            },
+            "entities": {
+              "type": "array",
+              "description": "Named entity anchor identifiers the package extends with additional fields or behaviours.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true,
+              "examples": [["entity::User", "entity::Organization"]]
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "description": "The ordered list of components that make up this capability package. Each component is an independently trackable unit of change applied to the host codebase. At least one component is required.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "description": "A single installable component within the capability package.",
+        "required": ["id", "layer", "optional", "surfaces_touched", "anchors_used", "blast_radius", "rollback", "permissions"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A unique identifier for this component within the package, used for dependency resolution and rollback tracking.",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "examples": ["stripe-webhook-handler", "billing-ui-panel"]
+          },
+          "layer": {
+            "type": "string",
+            "description": "The architectural layer this component operates at. 'module' adds a self-contained new module; 'component' adds a UI or service component; 'behavior' modifies existing behaviour via hooks; 'improvement' refines or optimises existing code.",
+            "enum": ["module", "component", "behavior", "improvement"]
+          },
+          "optional": {
+            "type": "boolean",
+            "description": "If true, this component can be omitted during installation without breaking the package. The installer may present it as an opt-in feature."
+          },
+          "depends_on": {
+            "type": "array",
+            "description": "List of component ids (within this package) that must be applied before this component.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "surfaces_touched": {
+            "type": "array",
+            "description": "The host surface identifiers that this component reads from or writes to.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "anchors_used": {
+            "type": "array",
+            "description": "The specific host anchor identifiers (hooks, slots, entities) this component binds to.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "blast_radius": {
+            "type": "object",
+            "description": "An assessment of how broadly this component's changes propagate through the host codebase. Used by the installer to warn about high-impact components.",
+            "required": ["structural_impact", "dependency_depth"],
+            "additionalProperties": false,
+            "properties": {
+              "structural_impact": {
+                "type": "array",
+                "description": "Human-readable labels describing which structural areas of the host are affected (e.g. 'database schema', 'API routes', 'shared auth middleware').",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "examples": [["database schema", "API routes"]]
+              },
+              "dependency_depth": {
+                "type": "integer",
+                "description": "The maximum depth of the dependency chain within the host that this component touches. 0 means isolated, higher values indicate broader coupling.",
+                "minimum": 0
+              }
+            }
+          },
+          "rollback": {
+            "type": "object",
+            "description": "Describes the rollback strategy for this component. Stateless rollback is always available via snapshot; stateful rollback may require additional migration steps.",
+            "required": ["stateless"],
+            "additionalProperties": false,
+            "properties": {
+              "stateless": {
+                "type": "string",
+                "description": "The stateless rollback strategy. 'snapshot-based' means the installer captures a snapshot before applying and can restore it.",
+                "enum": ["snapshot-based"]
+              },
+              "side_effects_isolated": {
+                "type": "boolean",
+                "description": "If true, this component's side effects are isolated and it can be rolled back independently. Required to be true for optional components to enable partial-success semantics."
+              },
+              "stateful": {
+                "type": "array",
+                "description": "Optional list of stateful rollback operations, such as database down-migrations, that must be executed before restoring the snapshot.",
+                "items": {
+                  "type": "object",
+                  "required": ["type", "down"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "description": "The kind of stateful operation to reverse (e.g. 'db_migration', 'seed_data', 'external_api_call').",
+                      "minLength": 1,
+                      "examples": ["db_migration", "seed_data"]
+                    },
+                    "down": {
+                      "type": "string",
+                      "description": "A reference to the rollback script or command to execute (e.g. a migration filename, a shell command, or a named procedure).",
+                      "minLength": 1,
+                      "examples": ["20240601_add_subscriptions.down.sql", "rails db:rollback STEP=1"]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "permissions": {
+            "type": "object",
+            "description": "Declares the permissions this component requires from the host. Used by the installer and host operator to gate installation based on policy.",
+            "required": ["surfaces_writable"],
+            "additionalProperties": false,
+            "properties": {
+              "surfaces_writable": {
+                "type": "array",
+                "description": "The subset of surfaces_touched that this component writes to (creates, updates, or deletes data). Must be a subset of surfaces_touched.",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "schema_migration": {
+                "type": "boolean",
+                "description": "If true, this component includes a database schema migration that will modify the host's data model."
+              },
+              "external_deps": {
+                "type": "array",
+                "description": "List of external package identifiers (e.g. npm or PyPI package names) this component introduces as new dependencies.",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true,
+                "examples": [["stripe", "@stripe/stripe-js"]]
+              }
+            }
+          }
+        }
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "description": "Known conflicts with other capability packages. The SCSP installer will block simultaneous installation of conflicting packages unless the user explicitly overrides.",
+      "items": {
+        "type": "object",
+        "required": ["id", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The id of the conflicting capability package.",
+            "minLength": 1,
+            "examples": ["legacy-billing", "manual-dark-mode"]
+          },
+          "surfaces_overlap": {
+            "type": "array",
+            "description": "The specific surface identifiers where the conflict manifests.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "anchors_overlap": {
+            "type": "array",
+            "description": "The specific anchor identifiers where the conflict manifests.",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "A human-readable explanation of why these two packages conflict.",
+            "minLength": 1,
+            "examples": ["Both packages write to the billing::invoices entity and cannot be reconciled."]
+          }
+        }
+      }
+    },
+    "risk_factors": {
+      "type": "object",
+      "description": "Risk metadata for this package. Used by the installer to surface warnings to the operator before applying the package.",
+      "additionalProperties": false,
+      "properties": {
+        "auto_derived": {
+          "type": "boolean",
+          "description": "If true, the risk factors listed in 'additional' were derived automatically by tooling rather than hand-authored. Treat with proportionally less trust."
+        },
+        "additional": {
+          "type": "array",
+          "description": "Human-readable descriptions of specific risks that are not captured elsewhere in the schema (e.g. 'Modifies shared authentication middleware — review before applying to production').",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "examples": [["Modifies shared auth middleware", "Introduces a breaking API route change"]]
+        }
+      }
+    }
+  }
+}

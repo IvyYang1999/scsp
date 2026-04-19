@@ -1,0 +1,39 @@
+{
+  "name": "scsp",
+  "version": "0.1.0",
+  "description": "Software Capability Sharing Protocol — decentralized software evolution through agent-native capability packages",
+  "main": "dist/index.js",
+  "bin": {
+    "scsp": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "validate": "ts-node src/cli.ts validate examples/capabilities/*.scsp",
+    "validate:all": "ts-node src/cli.ts validate examples/capabilities/auth-totp.scsp examples/capabilities/calendar-week-view.scsp examples/capabilities/approval-workflow.scsp examples/capabilities/perf-image-lazy-load.scsp",
+    "test": "npm run validate:all"
+  },
+  "keywords": [
+    "scsp",
+    "protocol",
+    "agent",
+    "decentralized",
+    "software",
+    "capability",
+    "sharing"
+  ],
+  "author": "SCSP Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "ajv": "^8.12.0",
+    "ajv-formats": "^3.0.1",
+    "commander": "^11.1.0",
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
