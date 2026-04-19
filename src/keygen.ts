@@ -1,7 +1,7 @@
 import {
   generateKeyPairSync,
-  createSign,
-  createVerify,
+  sign as cryptoSign,
+  verify as cryptoVerify,
   KeyObject,
 } from 'crypto';
 import * as fs from 'fs';
@@ -104,11 +104,9 @@ export function signCapability(capabilityPath: string, keyFilePath: string): str
     .join('\n');
 
   const privateKey = loadPrivateKey(keyFilePath);
-  const sign = createSign('SHA512');
-  sign.update(frontmatterText);
-  sign.end();
-
-  const sigBuffer = sign.sign(privateKey);
+  // ed25519 uses crypto.sign(undefined, ...) — not createSign('SHA512')
+  // which throws ERR_CRYPTO_UNSUPPORTED_OPERATION for ed25519 keys.
+  const sigBuffer = cryptoSign(undefined, Buffer.from(frontmatterText, 'utf-8'), privateKey);
   return `ed25519:${sigBuffer.toString('base64')}`;
 }
 
@@ -144,11 +142,13 @@ export function verifySignature(capability: ParsedCapability): boolean {
     const publicKey = loadPublicKeyFromString(authorKey);
     const sigBuffer = Buffer.from(signature.slice('ed25519:'.length), 'base64');
 
-    const verify = createVerify('SHA512');
-    verify.update(frontmatterText);
-    verify.end();
-
-    return verify.verify(publicKey, sigBuffer);
+    // ed25519 uses crypto.verify(undefined, ...) — not createVerify('SHA512')
+    return cryptoVerify(
+      undefined,
+      Buffer.from(frontmatterText, 'utf-8'),
+      publicKey,
+      sigBuffer
+    );
   } catch {
     return false;
   }

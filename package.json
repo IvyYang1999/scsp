@@ -1,8 +1,9 @@
 {
   "name": "@yytyyf/scsp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Software Capability Sharing Protocol — decentralized software evolution through agent-native capability packages",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "scsp": "./dist/cli.js"
   },

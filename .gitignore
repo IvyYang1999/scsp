@@ -3,3 +3,8 @@ dist/
 *.js.map
 .DS_Store
 *.env
+
+# SCSP generated files (local only)
+host-snapshot.json
+.scsp-verify/
+.scsp-cache/

@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { validateFile, parseCapabilityString } from './parser';
 import { runInit } from './init';
-import { runKeygen, signCapability, verifySignature } from './keygen';
+import { runKeygen, verifySignature } from './keygen';
 import { install, healthCheck } from './executor';
 import { pack } from './packer';
 import { search, fetchMetadata, type CapabilityMetadata } from './registry';
@@ -199,79 +199,30 @@ program
     }
   });
 
-// ─── publish (stub) ───────────────────────────────────────────────────────────
+// ─── publish ─────────────────────────────────────────────────────────────────
+// Alias for publish-cap — kept for backwards compatibility.
 
 program
   .command('publish <file>')
-  .description('Publish a .scsp capability package to a registry')
-  .option('--registry <url>', 'Registry URL (git repo or HTTP)', 'https://github.com/IvyYang1999/scsp')
-  .action((file: string, opts: { registry: string }) => {
-    console.log(`Publishing ${file} to ${opts.registry}...`);
-    console.log('');
-
-    // Validate first
-    const absPath = path.resolve(file);
-    if (!fs.existsSync(absPath)) {
-      console.error(`File not found: ${file}`);
+  .description('Publish a .scsp capability package to the registry via Pull Request (alias for publish-cap)')
+  .option('--registry-repo <repo>', 'Target GitHub repo (owner/repo)', 'IvyYang1999/scsp')
+  .option('--pricing <model>', 'Pricing model: free, one-time, subscription', 'free')
+  .option('--price <amount>', 'Price amount (for paid tiers)', '0')
+  .option('--currency <code>', 'Currency code (e.g. USD)', 'USD')
+  .action(async (file: string, opts: { registryRepo: string; pricing: string; price: string; currency: string }) => {
+    const pricingModel = opts.pricing as 'free' | 'one-time' | 'subscription';
+    const amount = parseFloat(opts.price) || 0;
+    try {
+      await runPublish(file, opts.registryRepo, {
+        pricing: {
+          model: pricingModel,
+          ...(pricingModel !== 'free' && amount > 0 ? { amount, currency: opts.currency } : {}),
+        },
+      });
+    } catch (err) {
+      console.error(`Publish failed: ${(err as Error).message}`);
       process.exit(1);
     }
-
-    const result = validateFile(absPath);
-    if (!result.ok) {
-      console.error('Validation failed — fix errors before publishing:');
-      for (const e of [...(result.schemaErrors || []), ...(result.consistencyErrors || [])]) {
-        console.error(`  ${e}`);
-      }
-      process.exit(1);
-    }
-
-    const id = result.capability?.frontmatter?.id as string;
-
-    // Auto-sign if a key is available for this author
-    if (result.capability) {
-      const fm = result.capability.frontmatter;
-      const authorName =
-        fm.author && typeof (fm.author as Record<string, unknown>).name === 'string'
-          ? (fm.author as Record<string, string>).name
-          : undefined;
-
-      if (authorName) {
-        const home = process.env.HOME ?? process.env.USERPROFILE ?? '/tmp';
-        const keyPath = path.join(home, '.scsp', 'keys', `${authorName}.private`);
-        if (fs.existsSync(keyPath)) {
-          try {
-            const signature = signCapability(absPath, keyPath);
-            console.log(`✓ Auto-signed with key: ~/.scsp/keys/${authorName}.private`);
-            console.log(`  Signature: ${signature}`);
-            console.log('');
-            console.log(
-              '  To embed this signature, add or replace the "signature:" field in your .scsp frontmatter:'
-            );
-            console.log(`    signature: "${signature}"`);
-            console.log('');
-          } catch (e) {
-            console.warn(`  ⚠  Could not auto-sign: ${(e as Error).message}`);
-            console.log('');
-          }
-        } else {
-          console.log(
-            `  ℹ  No signing key found at ~/.scsp/keys/${authorName}.private`
-          );
-          console.log('     Run: scsp keygen <your-name>  to generate one.');
-          console.log('');
-        }
-      }
-    }
-
-    console.log(`✓ Validation passed for capability: ${id}`);
-    console.log('');
-    console.log('To publish to the git-based registry:');
-    console.log(`  1. Fork ${opts.registry}`);
-    console.log(`  2. Copy ${file} to capabilities/${id}/${id}.scsp`);
-    console.log(`  3. Create metadata.json in capabilities/${id}/`);
-    console.log(`  4. Submit a Pull Request — the bot will auto-validate and merge`);
-    console.log('');
-    console.log('HTTP registry publish (V0.2): coming soon');
   });
 
 // ─── install ──────────────────────────────────────────────────────────────────

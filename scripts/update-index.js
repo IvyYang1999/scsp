@@ -92,16 +92,37 @@ function extractDescription(content) {
 }
 
 /**
- * Flatten the `surfaces` field from the .scsp frontmatter.
- * The field can be either an array of strings or an object whose keys
- * are surface names.
+ * Extract surfaces from the .scsp frontmatter requires.surfaces field.
+ * Returns a { entities, logic_domains, ui_areas } object that matches
+ * the shape registry.ts expects for filtering and relevance scoring.
+ *
+ * Handles both:
+ *  - object: { entities: [...], logic_domains: [...], ui_areas: [...] }
+ *  - flat array: ["auth", "User"] (legacy — split by guessing type)
  */
 function extractSurfaces(requires) {
-  if (!requires || !requires.surfaces) return [];
+  if (!requires || !requires.surfaces) {
+    return { entities: [], logic_domains: [], ui_areas: [] };
+  }
   const s = requires.surfaces;
-  if (Array.isArray(s)) return s;
-  if (typeof s === 'object') return Object.keys(s);
-  return [];
+
+  if (typeof s === 'object' && !Array.isArray(s)) {
+    return {
+      entities:      Array.isArray(s.entities)      ? s.entities      : [],
+      logic_domains: Array.isArray(s.logic_domains) ? s.logic_domains : [],
+      ui_areas:      Array.isArray(s.ui_areas)      ? s.ui_areas      : [],
+    };
+  }
+
+  // Legacy flat array: heuristically categorize
+  if (Array.isArray(s)) {
+    const entities = s.filter(v => /^[A-Z]/.test(v));           // PascalCase → entity
+    const ui_areas = s.filter(v => /^(settings|dashboard|nav|admin|profile|auth|home|sidebar|modal|header|footer|checkout|search|calendar|reports|documents|notifications|help|inbox|messages|landing|onboarding|upload|billing|results|schedule)$/i.test(v));
+    const logic_domains = s.filter(v => !entities.includes(v) && !ui_areas.includes(v));
+    return { entities, logic_domains, ui_areas };
+  }
+
+  return { entities: [], logic_domains: [], ui_areas: [] };
 }
 
 /**
@@ -199,7 +220,7 @@ for (const capId of capabilityDirs) {
     tags:                frontmatter.tags          || [],
     layer:               layer                     || existing.layer    || null,
     description:         description               || existing.description || '',
-    surfaces,
+    surfaces,   // now { entities, logic_domains, ui_areas } — matches registry.ts shape
     ...(anchors ? { anchors } : {}),
     author_name:         frontmatter.author && frontmatter.author.name
                            ? frontmatter.author.name

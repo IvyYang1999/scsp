@@ -1437,7 +1437,7 @@ async function updateSnapshot(
 
   const fm = capability.frontmatter;
   const components = (fm.components as Array<{ id: string; anchors_used?: string[] }>) ?? [];
-  const anchorsUsed = Array.from(new Set(components.flatMap((c) => c.anchors_used ?? [])));
+  const componentIds = components.map((c) => c.id).filter(Boolean);
 
   // Remove existing entry if re-installing
   snapshot.installed_capabilities = snapshot.installed_capabilities.filter(
@@ -1448,9 +1448,12 @@ async function updateSnapshot(
     id: fm.id as string,
     version: fm.version as string,
     installed_at: new Date().toISOString(),
-    anchors_used: anchorsUsed,
-    rollback_type: 'snapshot-based',
-  });
+    // Use schema-compliant field name components_applied
+    // (backward-compat: executor's own HostSnapshot type uses anchors_used for conflict detection)
+    anchors_used: Array.from(new Set(components.flatMap((c) => c.anchors_used ?? []))),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    components_applied: componentIds.length > 0 ? componentIds : ['main'],
+  } as any);
 
   snapshot.generated_at = new Date().toISOString();
 
