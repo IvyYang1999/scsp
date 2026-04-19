@@ -1,30 +1,7 @@
 {
   "scsp_registry": "0.1",
-  "updated_at": "2026-04-19T08:50:00Z",
+  "updated_at": "2026-04-19T10:19:33.548Z",
   "capabilities": [
-    {
-      "id": "swob-session-summarizer-v1",
-      "name": "AI Session Summarizer",
-      "version": "1.0.0",
-      "tags": ["ai", "productivity", "session", "swob"],
-      "layer": "module",
-      "description": "AI Session Summarizer adds on-demand, AI-generated 2-3 sentence digests to every Claude Code session in Swob. Instead of relying on raw firstUserMessage, it reads key turns and produces a cached summary: what was built, what decisions were made, and the outcome. Summaries are generated lazily, cached in Library metadata, and never block the UI. Gracefully degrades when ANTHROPIC_API_KEY is absent.",
-      "surfaces": ["entities", "logic_domains", "ui_areas"],
-      "anchors": {
-        "hooks": ["session.parse.post_build"],
-        "slots": ["toolbar.actions", "info_panel.sections"],
-        "entities": ["SessionSummary"]
-      },
-      "author_name": "ivy",
-      "author_key": "ed25519:MCowBQYDK2VwAyEAb3r9pQmK8nZvXqJsLfTwCdUeYhGiNmRoSpWxOkHtA1E=",
-      "active_installs": 1,
-      "installs": 1,
-      "fork_count": 0,
-      "compatibility_score": 0.96,
-      "pricing_model": "free",
-      "signed": true,
-      "revoked": false
-    },
     {
       "id": "approval-workflow-v1",
       "name": "Document Approval Workflow",
@@ -36,11 +13,19 @@
       ],
       "layer": "behavior",
       "description": "Document Approval Workflow adds a structured, multi-step review and sign-off process to any document or content entity in the host application. Documents move through a clearly defined state machin...",
-      "surfaces": [
-        "entities",
-        "logic_domains",
-        "ui_areas"
-      ],
+      "surfaces": {
+        "entities": [
+          "User",
+          "Document"
+        ],
+        "logic_domains": [
+          "notification"
+        ],
+        "ui_areas": [
+          "documents",
+          "dashboard"
+        ]
+      },
       "anchors": {
         "hooks": [
           "document.save.post_write",
@@ -77,11 +62,17 @@
       ],
       "layer": "module",
       "description": "TOTP Two-Factor Authentication adds RFC 6238-compliant time-based one-time password support to the host application's login flow. Once enabled, users who have activated 2FA must supply a valid 6-di...",
-      "surfaces": [
-        "entities",
-        "logic_domains",
-        "ui_areas"
-      ],
+      "surfaces": {
+        "entities": [
+          "User"
+        ],
+        "logic_domains": [
+          "auth"
+        ],
+        "ui_areas": [
+          "settings"
+        ]
+      },
       "anchors": {
         "hooks": [
           "auth.password_login.post_verify"
@@ -114,9 +105,14 @@
       ],
       "layer": "component",
       "description": "Calendar Week View adds a 7-day horizontal week grid to the host application's calendar surface. It slots into the `calendar.main-view` anchor alongside (or replacing) any existing month or list vi...",
-      "surfaces": [
-        "ui_areas"
-      ],
+      "surfaces": {
+        "entities": [],
+        "logic_domains": [],
+        "ui_areas": [
+          "calendar",
+          "dashboard"
+        ]
+      },
       "anchors": {
         "slots": [
           "calendar.main-view"
@@ -143,9 +139,13 @@
       ],
       "layer": "improvement",
       "description": "Image Lazy Loading improves application performance by deferring the loading of off-screen images until they approach the user's viewport. It targets the two most impactful web performance metrics:...",
-      "surfaces": [
-        "ui_areas"
-      ],
+      "surfaces": {
+        "entities": [],
+        "logic_domains": [],
+        "ui_areas": [
+          "any"
+        ]
+      },
       "anchors": {
         "slots": [],
         "hooks": [
@@ -158,6 +158,49 @@
       "installs": 451,
       "fork_count": 31,
       "compatibility_score": 0.97,
+      "pricing_model": "free",
+      "signed": true,
+      "revoked": false
+    },
+    {
+      "id": "swob-session-summarizer-v1",
+      "name": "AI Session Summarizer",
+      "version": "1.0.0",
+      "tags": [
+        "ai",
+        "productivity",
+        "session",
+        "swob"
+      ],
+      "layer": "module",
+      "description": "AI Session Summarizer adds an on-demand, AI-generated summary to every Claude Code session in Swob. Instead of relying on the raw `firstUserMessage` (which is often a vague continuation prompt), th...",
+      "surfaces": {
+        "entities": [
+          "SessionSummary"
+        ],
+        "logic_domains": [
+          "session"
+        ],
+        "ui_areas": [
+          "toolbar",
+          "info_panel"
+        ]
+      },
+      "anchors": {
+        "hooks": [
+          "session.parse.post_build"
+        ],
+        "slots": [
+          "toolbar.actions",
+          "info_panel.sections"
+        ]
+      },
+      "author_name": "ivy",
+      "author_key": "ed25519:MCowBQYDK2VwAyEAb3r9pQmK8nZvXqJsLfTwCdUeYhGiNmRoSpWxOkHtA1E=",
+      "active_installs": 1,
+      "installs": 1,
+      "fork_count": 0,
+      "compatibility_score": 0.96,
       "pricing_model": "free",
       "signed": true,
       "revoked": false
