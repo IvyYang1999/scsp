@@ -1,0 +1,25 @@
+{
+  "id": "auth-totp-v1",
+  "pricing": {
+    "model": "free"
+  },
+  "preview_url": "https://scsp.dev/preview/auth-totp-v1",
+  "screenshots": [],
+  "reports": {
+    "success": 143,
+    "fail": 3,
+    "rollback": 1,
+    "sample_size": 147
+  },
+  "installs": 163,
+  "active_installs": 147,
+  "fork_count": 12,
+  "stack_depth": 2,
+  "compatibility_score": 0.94,
+  "auto_review": {
+    "schema_valid": true,
+    "ncv_self_check": "pass",
+    "dependency_audit": "clean",
+    "signed": true
+  }
+}

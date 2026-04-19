@@ -8,9 +8,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "validate": "ts-node src/cli.ts validate examples/capabilities/*.scsp",
+    "validate": "ts-node src/cli.ts validate",
     "validate:all": "ts-node src/cli.ts validate examples/capabilities/auth-totp.scsp examples/capabilities/calendar-week-view.scsp examples/capabilities/approval-workflow.scsp examples/capabilities/perf-image-lazy-load.scsp",
-    "test": "npm run validate:all"
+    "test": "npm run validate:all",
+    "update-index": "node scripts/update-index.js",
+    "publish": "bash scripts/publish-pr.sh"
   },
   "keywords": [
     "scsp",

@@ -1,0 +1,34 @@
+{
+  "authors": [
+    {
+      "name": "Alice Chen",
+      "key": "ed25519:MCowBQYDK2VwAyEAAliceChenPlaceholderPublicKey==",
+      "verified": true,
+      "profile_url": "https://github.com/alice-chen-scsp"
+    },
+    {
+      "name": "Marco Rossi",
+      "key": "ed25519:MCowBQYDK2VwAyEAMarcoRossiPlaceholderPublicKey==",
+      "verified": true,
+      "profile_url": "https://github.com/marco-rossi-scsp"
+    },
+    {
+      "name": "Priya Sharma",
+      "key": "ed25519:MCowBQYDK2VwAyEAPriyaSharmaPlaceholderPublicKey=",
+      "verified": true,
+      "profile_url": "https://github.com/priya-sharma-scsp"
+    },
+    {
+      "name": "Kai Muller",
+      "key": "ed25519:MCowBQYDK2VwAyEAKaiMullerPlaceholderPublicKeyy=",
+      "verified": true,
+      "profile_url": "https://github.com/kai-muller-scsp"
+    },
+    {
+      "name": "scsp-examples",
+      "key": "ed25519:MCowBQYDK2VwAyEAplaceholder=",
+      "verified": true,
+      "profile_url": "https://github.com/scsp-community"
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "scsp_registry": "0.1",
+  "updated_at": "2026-04-19T04:24:44.262Z",
+  "capabilities": [
+    {
+      "id": "approval-workflow-v1",
+      "name": "Document Approval Workflow",
+      "version": "1.0.0",
+      "tags": [
+        "workflow",
+        "collaboration",
+        "enterprise"
+      ],
+      "layer": "behavior",
+      "description": "Document Approval Workflow adds a structured, multi-step review and sign-off process to any document or content entity in the host application. Documents move through a clearly defined state machin...",
+      "surfaces": [
+        "entities",
+        "logic_domains",
+        "ui_areas"
+      ],
+      "anchors": {
+        "hooks": [
+          "document.save.post_write",
+          "notification.send.pre_dispatch"
+        ],
+        "slots": [
+          "documents.action-bar",
+          "documents.detail.sidebar",
+          "dashboard.pending-actions"
+        ],
+        "entities": [
+          "User",
+          "Document"
+        ]
+      },
+      "author_name": "carol",
+      "author_key": "ed25519:MCowBQYDK2VwAyEA9t4mNqR8wYpLsF6kJiCeZbDhUxOvGmAqWnTrKfHsP2X=",
+      "active_installs": 203,
+      "installs": 224,
+      "fork_count": 19,
+      "compatibility_score": 0.88,
+      "pricing_model": "free",
+      "signed": true,
+      "revoked": false
+    },
+    {
+      "id": "auth-totp-v1",
+      "name": "TOTP Two-Factor Authentication",
+      "version": "1.0.0",
+      "tags": [
+        "auth",
+        "security",
+        "2fa"
+      ],
+      "layer": "module",
+      "description": "TOTP Two-Factor Authentication adds RFC 6238-compliant time-based one-time password support to the host application's login flow. Once enabled, users who have activated 2FA must supply a valid 6-di...",
+      "surfaces": [
+        "entities",
+        "logic_domains",
+        "ui_areas"
+      ],
+      "anchors": {
+        "hooks": [
+          "auth.password_login.post_verify"
+        ],
+        "slots": [
+          "settings.security"
+        ],
+        "entities": [
+          "User"
+        ]
+      },
+      "author_name": "alice",
+      "author_key": "ed25519:MCowBQYDK2VwAyEA4k7jBKJFvF2xRqmH9pLnZdTsWuIoYeCgXbNvPqRsT3U=",
+      "active_installs": 147,
+      "installs": 163,
+      "fork_count": 12,
+      "compatibility_score": 0.94,
+      "pricing_model": "free",
+      "signed": true,
+      "revoked": false
+    },
+    {
+      "id": "calendar-week-view-v1",
+      "name": "Calendar Week View",
+      "version": "1.0.0",
+      "tags": [
+        "ui",
+        "calendar",
+        "productivity"
+      ],
+      "layer": "component",
+      "description": "Calendar Week View adds a 7-day horizontal week grid to the host application's calendar surface. It slots into the `calendar.main-view` anchor alongside (or replacing) any existing month or list vi...",
+      "surfaces": [
+        "ui_areas"
+      ],
+      "anchors": {
+        "slots": [
+          "calendar.main-view"
+        ]
+      },
+      "author_name": "bob",
+      "author_key": "ed25519:MCowBQYDK2VwAyEA7r2kLmP9vXqNsD4wJhTfYbCeZuGnRiOpWxMaKjHsE1V=",
+      "active_installs": 89,
+      "installs": 97,
+      "fork_count": 7,
+      "compatibility_score": 0.91,
+      "pricing_model": "free",
+      "signed": true,
+      "revoked": false
+    },
+    {
+      "id": "perf-image-lazy-load-v1",
+      "name": "Image Lazy Loading",
+      "version": "1.0.0",
+      "tags": [
+        "performance",
+        "images",
+        "ux"
+      ],
+      "layer": "improvement",
+      "description": "Image Lazy Loading improves application performance by deferring the loading of off-screen images until they approach the user's viewport. It targets the two most impactful web performance metrics:...",
+      "surfaces": [
+        "ui_areas"
+      ],
+      "anchors": {
+        "slots": [],
+        "hooks": [
+          "render.image.pre_output"
+        ]
+      },
+      "author_name": "dave",
+      "author_key": "ed25519:MCowBQYDK2VwAyEA3p9nKhQ7wZqMrG5jLiDfYtCbXvUoNmBeWsTkJpHrF8A=",
+      "active_installs": 412,
+      "installs": 451,
+      "fork_count": 31,
+      "compatibility_score": 0.97,
+      "pricing_model": "free",
+      "signed": true,
+      "revoked": false
+    }
+  ]
+}

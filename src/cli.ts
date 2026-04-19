@@ -4,6 +4,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { validateFile, parseCapabilityString } from './parser';
+import { runInit } from './init';
+import { runKeygen, signCapability, verifySignature } from './keygen';
+import { install, healthCheck } from './executor';
+import { pack } from './packer';
+import { search, fetchMetadata, type CapabilityMetadata } from './registry';
 
 const program = new Command();
 
@@ -42,11 +47,38 @@ program
       const result = validateFile(absPath);
       const name = result.capability?.frontmatter?.id ?? path.basename(file);
 
-      const out: Record<string, unknown> = { file, ok: result.ok, id: name };
+      // Verify signature if the capability has author.key and signature fields
+      let sigVerified: boolean | null = null;
+      let sigWarning: string | undefined;
+      if (result.capability) {
+        const fm = result.capability.frontmatter;
+        const hasAuthorKey =
+          fm.author && typeof (fm.author as Record<string, unknown>).key === 'string';
+        const hasSignature = typeof fm.signature === 'string';
+        if (hasAuthorKey && hasSignature) {
+          sigVerified = verifySignature(result.capability);
+          if (!sigVerified) {
+            sigWarning =
+              'Signature verification failed (placeholder key or tampered file — fix before publishing)';
+          }
+        }
+      }
+
+      const out: Record<string, unknown> = {
+        file,
+        ok: result.ok,
+        id: name,
+        signature_verified: sigVerified,
+      };
 
       if (!opts.json) {
         if (result.ok) {
           console.log(`\n✓ ${file} [${name}]`);
+          if (sigVerified === true) {
+            console.log(`  ✓ Signature verified`);
+          } else if (sigVerified === false) {
+            console.warn(`  ⚠  ${sigWarning}`);
+          }
           if (result.warnings?.length) {
             for (const w of result.warnings) {
               console.warn(`  ⚠  ${w}`);
@@ -60,6 +92,7 @@ program
           for (const e of result.schemaErrors || []) console.error(`  schema: ${e}`);
           for (const e of result.consistencyErrors || []) console.error(`  check:  ${e}`);
           for (const w of result.warnings || []) console.warn(`  warn:   ${w}`);
+          if (sigVerified === false) console.warn(`  warn:   ${sigWarning}`);
         }
       }
 
@@ -85,110 +118,33 @@ program
 
 program
   .command('pack')
-  .description('Generate a .scsp capability package from the current git diff')
+  .description('Generate a .scsp capability package from the current git diff using Claude AI')
   .option('--base <branch>', 'Base branch to diff against', 'main')
-  .option('--mode <mode>', 'Pack mode: quick (frontmatter+intent+probes) or full', 'quick')
+  .option('--mode <mode>', 'Pack mode: quick (frontmatter+intent+probes) or full (everything)', 'quick')
   .option('--out <file>', 'Output file path')
-  .action((opts: { base: string; mode: string; out?: string }) => {
-    console.log('scsp pack — generating capability package from git diff\n');
-
-    // Detect git diff summary
-    const { execSync } = require('child_process');
-    let diff = '';
-    try {
-      diff = execSync(`git diff ${opts.base} --stat 2>/dev/null`).toString();
-    } catch {
-      diff = '(no git diff available — using current directory)';
+  .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
+  .action(async (opts: { base: string; mode: string; out?: string; apiKey?: string }) => {
+    const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error('Error: ANTHROPIC_API_KEY required. Set env var or use --api-key <key>');
+      process.exit(1);
     }
-
-    const id = `my-capability-v1`;
-    const outFile = opts.out ?? `${id}.scsp`;
-
-    const quickTemplate = `---
-scsp: "0.1"
-id: "${id}"
-name: "My Capability"
-version: "1.0.0"
-tags: []
-
-author:
-  name: "your-name"
-  key: "ed25519:YOUR_PUBLIC_KEY"
-signature: "ed25519:SIGN_THIS_FILE"
-created: "${new Date().toISOString()}"
-revoked: false
-
-requires:
-  manifest_version: ">=0.1"
-  surfaces:
-    entities: []
-    logic_domains: []
-    ui_areas: []
-  anchors:
-    hooks: []
-    slots: []
-    entities: []
-
-components:
-  - id: "main"
-    layer: "module"
-    optional: false
-    surfaces_touched: []
-    anchors_used: []
-    blast_radius:
-      structural_impact: []
-      dependency_depth: 1
-    rollback:
-      stateless: "snapshot-based"
-    permissions:
-      surfaces_writable: []
-      schema_migration: false
-      external_deps: []
-
-risk_factors:
-  auto_derived: true
-  additional: []
----
-
-## Intent
-
-### Motivation
-<!-- Describe why this capability exists -->
-
-### Design Principles
-<!-- Key design decisions and constraints -->
-
-\`\`\`yaml probes:
-  - name: "TODO: add probes"
-    component: "main"
-    intent: "Verify the target extension point exists"
-    check_hints:
-      - lang: "universal"
-        type: "grep"
-        patterns: []
-        paths: ["src/"]
-    on_fail: "abort"
-\`\`\`
-
-\`\`\`yaml interfaces:
-  - name: "todo_interface"
-    component: "main"
-    input:
-      param: { type: "string", required: true }
-    output:
-      result: { type: "boolean" }
-    errors: []
-\`\`\`
-`;
-
-    fs.writeFileSync(outFile, quickTemplate);
-    console.log(`Draft generated: ${outFile}`);
-    console.log('\nGit diff summary used as context:');
-    console.log(diff || '  (empty diff)');
-    console.log('\nNext steps:');
-    console.log('  1. Edit the .scsp file to describe your capability');
-    console.log('  2. Run: scsp validate ' + outFile);
-    console.log('  3. Run: scsp publish ' + outFile + ' --registry <url>');
+    if (opts.mode !== 'quick' && opts.mode !== 'full') {
+      console.error('Error: --mode must be "quick" or "full"');
+      process.exit(1);
+    }
+    try {
+      await pack({
+        base: opts.base,
+        mode: opts.mode as 'quick' | 'full',
+        out: opts.out,
+        cwd: process.cwd(),
+        apiKey,
+      });
+    } catch (err) {
+      console.error(`Pack failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
   });
 
 // ─── inspect ─────────────────────────────────────────────────────────────────
@@ -264,6 +220,43 @@ program
     }
 
     const id = result.capability?.frontmatter?.id as string;
+
+    // Auto-sign if a key is available for this author
+    if (result.capability) {
+      const fm = result.capability.frontmatter;
+      const authorName =
+        fm.author && typeof (fm.author as Record<string, unknown>).name === 'string'
+          ? (fm.author as Record<string, string>).name
+          : undefined;
+
+      if (authorName) {
+        const home = process.env.HOME ?? process.env.USERPROFILE ?? '/tmp';
+        const keyPath = path.join(home, '.scsp', 'keys', `${authorName}.private`);
+        if (fs.existsSync(keyPath)) {
+          try {
+            const signature = signCapability(absPath, keyPath);
+            console.log(`✓ Auto-signed with key: ~/.scsp/keys/${authorName}.private`);
+            console.log(`  Signature: ${signature}`);
+            console.log('');
+            console.log(
+              '  To embed this signature, add or replace the "signature:" field in your .scsp frontmatter:'
+            );
+            console.log(`    signature: "${signature}"`);
+            console.log('');
+          } catch (e) {
+            console.warn(`  ⚠  Could not auto-sign: ${(e as Error).message}`);
+            console.log('');
+          }
+        } else {
+          console.log(
+            `  ℹ  No signing key found at ~/.scsp/keys/${authorName}.private`
+          );
+          console.log('     Run: scsp keygen <your-name>  to generate one.');
+          console.log('');
+        }
+      }
+    }
+
     console.log(`✓ Validation passed for capability: ${id}`);
     console.log('');
     console.log('To publish to the git-based registry:');
@@ -275,57 +268,151 @@ program
     console.log('HTTP registry publish (V0.2): coming soon');
   });
 
-// ─── install (stub) ───────────────────────────────────────────────────────────
+// ─── install ──────────────────────────────────────────────────────────────────
 
 program
   .command('install <id>')
-  .description('Install a capability package from a registry (6-stage execution)')
-  .option('--registry <url>', 'Registry URL', 'https://github.com/scsp-community/registry')
+  .description('Install a capability package (6-stage AI-powered execution)')
+  .option('--registry <url>', 'Registry URL', 'https://raw.githubusercontent.com/scsp-community/registry/main')
   .option('--dry-run', 'Run through all stages but do not apply changes')
-  .action((id: string, opts: { registry: string; dryRun?: boolean }) => {
-    console.log(`scsp install ${id}`);
-    console.log(`Registry: ${opts.registry}`);
-    console.log('');
-    console.log('6-Stage Execution Model:');
-    console.log('  [1/6] PROBE       — locating extension points in your codebase...');
-    console.log('  [2/6] VALIDATE    — checking compatibility with host manifest...');
-    console.log('  [3/6] DRY-RUN     — generating changes in temporary branch...');
-    console.log('  [4/6] CONFIRM     — review diff and confirm (human gate)');
-    console.log('  [5/6] APPLY       — applying changes and running migrations...');
-    console.log('  [6/6] VERIFY      — running contract tests...');
-    console.log('');
-    console.log('Note: Full executor implementation requires an AI agent runtime.');
-    console.log('This CLI provides the protocol scaffolding; agent integration is in progress.');
-    console.log('');
-    console.log('See PROTOCOL.md §4 for complete execution semantics.');
+  .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
+  .option('--local <file>', 'Install from a local .scsp file instead of registry')
+  .action(async (id: string, opts: { registry: string; dryRun?: boolean; apiKey?: string; local?: string }) => {
+    const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error('Error: ANTHROPIC_API_KEY required. Set env var or use --api-key <key>');
+      process.exit(1);
+    }
+    try {
+      await install(id, opts.registry, process.cwd(), {
+        dryRunOnly: opts.dryRun,
+        apiKey,
+        localFile: opts.local,
+      });
+    } catch (err) {
+      console.error(`\nInstall failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
   });
 
 // ─── health ───────────────────────────────────────────────────────────────────
 
 program
   .command('health')
-  .description('Run health check on all installed capabilities')
-  .action(() => {
-    const snapshotPath = path.resolve('host-snapshot.json');
-    if (!fs.existsSync(snapshotPath)) {
-      console.log('No host-snapshot.json found in current directory.');
-      console.log('Run: scsp init  to generate a host manifest and snapshot.');
-      return;
+  .description('Re-run probes and contracts for all installed capabilities')
+  .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
+  .action(async (opts: { apiKey?: string }) => {
+    const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    try {
+      await healthCheck(process.cwd(), apiKey);
+    } catch (err) {
+      console.error(`Health check failed: ${(err as Error).message}`);
+      process.exit(1);
     }
+  });
 
-    const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
-    const installed = snapshot.installed_capabilities ?? [];
+// ─── init ─────────────────────────────────────────────────────────────────────
 
-    if (installed.length === 0) {
-      console.log('No capabilities installed. Use: scsp install <id>');
-      return;
+program
+  .command('init')
+  .description('Initialize SCSP in your project — scans codebase and generates scsp-manifest.yaml')
+  .option('--cwd <path>', 'Project directory to initialize', '.')
+  .action(async (opts: { cwd: string }) => {
+    await runInit(opts.cwd);
+  });
+
+// ─── keygen ───────────────────────────────────────────────────────────────────
+
+program
+  .command('keygen')
+  .description('Generate an ed25519 key pair for signing capability packages')
+  .argument('<name>', 'Name for this key (e.g., your username)')
+  .action(async (name: string) => {
+    await runKeygen(name);
+  });
+
+// ─── search ───────────────────────────────────────────────────────────────────
+
+program
+  .command('search [query]')
+  .description('Search the SCSP registry for capability packages')
+  .option('--tag <tags...>', 'Filter by tags (all must match)')
+  .option('--surface <surfaces...>', 'Filter by surfaces (any match)')
+  .option('--registry <url>', 'Registry base URL')
+  .action(async (query: string | undefined, opts: { tag?: string[]; surface?: string[]; registry?: string }) => {
+    // Auto-detect local registry if it exists and no --registry given
+    const registryBase = opts.registry ?? (
+      fs.existsSync(path.join(process.cwd(), 'registry', 'index.json'))
+        ? path.join(process.cwd(), 'registry')
+        : undefined
+    );
+    try {
+      const results = await search({
+        query,
+        tags: opts.tag,
+        surfaces: opts.surface,
+        registryBase,
+      });
+
+      if (results.length === 0) {
+        console.log('No results found.');
+        return;
+      }
+
+      console.log(`Found ${results.length} capability(s):\n`);
+      for (const r of results) {
+        const score = (r.compatibility_score * 100).toFixed(0);
+        console.log(`  ${r.id} — ${r.name}  [${r.layer}]`);
+        console.log(`    tags: ${r.tags.join(', ')}  |  active installs: ${r.active_installs}  |  compat: ${score}%`);
+        console.log(`    ${r.description}`);
+        console.log('');
+      }
+    } catch (err) {
+      console.error(`Search failed: ${(err as Error).message}`);
+      process.exit(1);
     }
+  });
 
-    console.log(`Health check: ${installed.length} installed capability(s)`);
-    for (const cap of installed) {
-      console.log(`  checking ${cap.id}@${cap.version}...`);
-      // Executor would re-run probes + contracts here
-      console.log(`    ✓ (executor health check not yet wired — see PROTOCOL.md §HEALTH-CHECK)`);
+// ─── info ─────────────────────────────────────────────────────────────────────
+
+program
+  .command('info <id>')
+  .description('Show detailed metadata for a capability package in the registry')
+  .option('--registry <url>', 'Registry base URL')
+  .action(async (id: string, opts: { registry?: string }) => {
+    const registryBase = opts.registry ?? (
+      fs.existsSync(path.join(process.cwd(), 'registry', 'index.json'))
+        ? path.join(process.cwd(), 'registry')
+        : undefined
+    );
+    try {
+      const meta: CapabilityMetadata = await fetchMetadata(id, registryBase);
+
+      console.log(`\nCapability: ${meta.id}`);
+      console.log(`  Pricing:     ${meta.pricing.model}${meta.pricing.amount ? ` ($${meta.pricing.amount} ${meta.pricing.currency ?? ''})` : ''}`);
+      console.log(`  Installs:    ${meta.active_installs} active / ${meta.installs} total`);
+      console.log(`  Forks:       ${meta.fork_count}`);
+      console.log(`  Stack depth: ${meta.stack_depth}`);
+      console.log(`  Compat score:${(meta.compatibility_score * 100).toFixed(0)}%`);
+
+      console.log('\n  Reports (sample: ' + meta.reports.sample_size + '):');
+      console.log(`    success:  ${meta.reports.success}`);
+      console.log(`    fail:     ${meta.reports.fail}`);
+      console.log(`    rollback: ${meta.reports.rollback}`);
+
+      console.log('\n  Auto-review:');
+      console.log(`    schema valid:    ${meta.auto_review.schema_valid ? 'yes' : 'no'}`);
+      console.log(`    ncv self-check:  ${meta.auto_review.ncv_self_check}`);
+      console.log(`    dependency audit:${meta.auto_review.dependency_audit}`);
+      console.log(`    signed:          ${meta.auto_review.signed ? 'yes' : 'no'}`);
+
+      if (meta.preview_url) {
+        console.log(`\n  Preview: ${meta.preview_url}`);
+      }
+      console.log('');
+    } catch (err) {
+      console.error(`Info failed: ${(err as Error).message}`);
+      process.exit(1);
     }
   });
 

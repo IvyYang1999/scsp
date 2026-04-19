@@ -1,0 +1,257 @@
+name: Registry Capability Review
+
+on:
+  pull_request:
+    paths:
+      - "registry/capabilities/**"
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Validate Capabilities
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Label PR with capability-review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: ['capability-review'],
+            });
+
+      - name: Detect changed .scsp files
+        id: changed
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          FILES=$(git diff --name-only --diff-filter=ACM "$BASE_SHA" "$HEAD_SHA" \
+                  | grep '^registry/capabilities/.*\.scsp$' || true)
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$FILES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "count=$(echo "$FILES" | grep -c '\.scsp' || echo 0)" >> "$GITHUB_OUTPUT"
+
+      - name: Run validation checks
+        id: checks
+        if: steps.changed.outputs.count != '0'
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          set +e  # don't exit on individual failures
+
+          RESULTS=""
+          ALL_PASS=true
+
+          while IFS= read -r SCSP_FILE; do
+            [ -z "$SCSP_FILE" ] && continue
+
+            CAP_DIR=$(dirname "$SCSP_FILE")
+            CAP_ID=$(basename "$CAP_DIR")
+            FILE_RESULT=""
+            FILE_PASS=true
+
+            echo "::group::Checking $CAP_ID"
+
+            # ── Check 1: schema validation ────────────────────────────────
+            echo "Running npm run validate on $SCSP_FILE"
+            VALIDATE_OUT=$(npm run validate -- "$SCSP_FILE" 2>&1)
+            VALIDATE_EXIT=$?
+            if [ $VALIDATE_EXIT -eq 0 ]; then
+              FILE_RESULT+="  - Schema validation: ✓ passed\n"
+            else
+              FILE_RESULT+="  - Schema validation: ✗ failed\n\`\`\`\n${VALIDATE_OUT}\n\`\`\`\n"
+              FILE_PASS=false
+              ALL_PASS=false
+            fi
+
+            # ── Check 2: metadata.json present ───────────────────────────
+            META_FILE="${CAP_DIR}/metadata.json"
+            if [ -f "$META_FILE" ]; then
+              FILE_RESULT+="  - \`metadata.json\` present: ✓\n"
+            else
+              FILE_RESULT+="  - \`metadata.json\` present: ✗ missing at \`${META_FILE}\`\n"
+              FILE_PASS=false
+              ALL_PASS=false
+            fi
+
+            # ── Check 3: capability listed in index.json ──────────────────
+            INDEX_FILE="registry/index.json"
+            if [ -f "$INDEX_FILE" ]; then
+              if python3 -c "
+          import json, sys
+          idx = json.load(open('$INDEX_FILE'))
+          ids = [c.get('id','') for c in idx.get('capabilities', [])]
+          sys.exit(0 if '$CAP_ID' in ids else 1)
+          " 2>/dev/null; then
+                FILE_RESULT+="  - Listed in \`index.json\`: ✓\n"
+              else
+                FILE_RESULT+="  - Listed in \`index.json\`: ✗ \`$CAP_ID\` not found\n"
+                FILE_PASS=false
+                ALL_PASS=false
+              fi
+            else
+              FILE_RESULT+="  - Listed in \`index.json\`: ✗ \`registry/index.json\` not found\n"
+              FILE_PASS=false
+              ALL_PASS=false
+            fi
+
+            echo "::endgroup::"
+
+            if [ "$FILE_PASS" = true ]; then
+              STATUS_ICON="✓"
+            else
+              STATUS_ICON="✗"
+            fi
+
+            RESULTS+="### ${STATUS_ICON} \`${CAP_ID}\`\n${FILE_RESULT}\n"
+
+          done <<< "$CHANGED_FILES"
+
+          # Write outputs for the comment step
+          {
+            echo "all_pass=$ALL_PASS"
+            echo "results<<ENDOFRESULTS"
+            printf '%b' "$RESULTS"
+            echo "ENDOFRESULTS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        if: steps.changed.outputs.count != '0'
+        env:
+          ALL_PASS: ${{ steps.checks.outputs.all_pass }}
+          RESULTS: ${{ steps.checks.outputs.results }}
+        with:
+          script: |
+            const allPass = process.env.ALL_PASS === 'true';
+            const results = process.env.RESULTS || '_No results available._';
+
+            const header = allPass
+              ? '## Registry Capability Review — ✓ All checks passed'
+              : '## Registry Capability Review — ✗ One or more checks failed';
+
+            const footer = allPass
+              ? '_All capability checks passed. This PR is eligible for auto-approval._'
+              : '_Please fix the issues above and push again._';
+
+            const body = `${header}\n\n${results}\n---\n${footer}`;
+
+            // Find and update existing bot comment, or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existing = comments.find(
+              c => c.user.type === 'Bot' && c.body.includes('Registry Capability Review')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
+
+      - name: Auto-approve or request changes
+        uses: actions/github-script@v7
+        if: steps.changed.outputs.count != '0'
+        env:
+          ALL_PASS: ${{ steps.checks.outputs.all_pass }}
+        with:
+          script: |
+            const allPass = process.env.ALL_PASS === 'true';
+            const pr = context.payload.pull_request;
+
+            if (allPass) {
+              // Add auto-approved label
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: ['auto-approved'],
+              });
+
+              // Remove needs-fixes label if present
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  name: 'needs-fixes',
+                });
+              } catch (_) { /* label may not exist */ }
+
+              // Submit APPROVE review
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                event: 'APPROVE',
+                body: 'All capability checks passed. Auto-approving.',
+              });
+
+            } else {
+              // Add needs-fixes label
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: ['needs-fixes'],
+              });
+
+              // Remove auto-approved label if present
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  name: 'auto-approved',
+                });
+              } catch (_) { /* label may not exist */ }
+
+              // Submit REQUEST_CHANGES review
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                event: 'REQUEST_CHANGES',
+                body: 'One or more capability checks failed. Please review the comment above.',
+              });
+            }
+
+      - name: No .scsp files changed
+        if: steps.changed.outputs.count == '0'
+        run: echo "No .scsp files were added or modified in registry/capabilities/. Skipping review."

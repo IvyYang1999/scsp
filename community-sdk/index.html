@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SCSP Community — Software Capability Sharing Protocol</title>
+  <meta name="description" content="Browse, install, and share software capabilities. Any open-source software. Community improvements. One command." />
+  <meta property="og:title" content="SCSP Community" />
+  <meta property="og:description" content="Decentralized software, powered by community." />
+  <meta property="og:type" content="website" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- =========================================================
+     NAVIGATION
+     ========================================================= -->
+<nav class="nav" role="navigation" aria-label="Main navigation">
+  <div class="container">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo" aria-label="SCSP home">
+        <div class="nav-logo-mark" aria-hidden="true">SC</div>
+        <div class="nav-logo-text">
+          <span class="nav-logo-name">SCSP</span>
+          <span class="nav-logo-tagline">Software Capability Sharing Protocol</span>
+        </div>
+      </a>
+
+      <ul class="nav-links" role="list">
+        <li>
+          <a href="#capabilities">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zm9.75-9.75A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg>
+            Browse
+          </a>
+        </li>
+        <li>
+          <a href="https://github.com/scsp-community/scsp/blob/main/docs/PROTOCOL.md" target="_blank" rel="noopener noreferrer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+            Docs
+          </a>
+        </li>
+        <li>
+          <a href="https://github.com/scsp-community/scsp" target="_blank" rel="noopener noreferrer">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.154-1.11-1.461-1.11-1.461-.908-.62.069-.608.069-.608 1.004.07 1.532 1.032 1.532 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.252-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.337-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z"/></svg>
+            GitHub
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- =========================================================
+     HERO
+     ========================================================= -->
+<section class="hero" aria-labelledby="hero-heading">
+  <div class="container">
+    <div class="hero-eyebrow" aria-label="Version">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
+      Protocol v0.1 — Now Live
+    </div>
+
+    <h1 class="hero-title" id="hero-heading">
+      Decentralized software,<br>
+      <span class="hero-title-accent">powered by community</span>
+    </h1>
+
+    <p class="hero-subtitle">
+      Any open-source software. Community improvements. One command.
+    </p>
+
+    <div class="hero-ctas">
+      <a href="#capabilities" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true"><path d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zm9.75-9.75A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg>
+        Browse Capabilities
+      </a>
+      <a href="#embed" class="btn btn-secondary">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M6.28 5.22a.75.75 0 010 1.06L2.56 10l3.72 3.72a.75.75 0 01-1.06 1.06L.97 10.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 0zm7.44 0a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 010-1.06z" clip-rule="evenodd" /></svg>
+        Add SCSP to Your App
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SEARCH + FILTERS
+     ========================================================= -->
+<div class="search-section" id="search-section" role="search">
+  <div class="container">
+    <div class="search-wrapper">
+      <div class="search-input-wrap">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+        <label for="search-input" class="sr-only">Search capabilities</label>
+        <input
+          type="search"
+          id="search-input"
+          placeholder="Search capabilities... e.g. 'dark theme', '2FA', 'calendar'"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="filter-row">
+        <div class="filter-group" role="group" aria-label="Filter by type">
+          <span class="filter-label">Type</span>
+          <button class="chip active" data-filter="layer" data-value="all">All</button>
+          <button class="chip" data-filter="layer" data-value="module">Module</button>
+          <button class="chip" data-filter="layer" data-value="component">Component</button>
+          <button class="chip" data-filter="layer" data-value="behavior">Behavior</button>
+          <button class="chip" data-filter="layer" data-value="improvement">Improvement</button>
+        </div>
+
+        <div class="filter-group" role="group" aria-label="Filter by surface">
+          <span class="filter-label">Surface</span>
+          <button class="chip" data-filter="surface" data-value="auth">Auth</button>
+          <button class="chip" data-filter="surface" data-value="ui">UI</button>
+          <button class="chip" data-filter="surface" data-value="workflow">Workflow</button>
+          <button class="chip" data-filter="surface" data-value="performance">Perf</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     CAPABILITIES GRID
+     ========================================================= -->
+<section class="capabilities-section" id="capabilities" aria-labelledby="capabilities-heading">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title" id="capabilities-heading">Community Capabilities</h2>
+      <span class="result-count" id="result-count" aria-live="polite"></span>
+    </div>
+    <div class="capabilities-grid" id="capabilities-grid" role="list" aria-label="Capabilities">
+      <!-- Cards rendered by JS -->
+      <div class="state-message" id="loading-state" aria-busy="true">
+        <div class="skeleton" style="height:24px;width:180px;margin:0 auto 12px;"></div>
+        <div class="skeleton" style="height:16px;width:240px;margin:0 auto;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     EMBED SECTION
+     ========================================================= -->
+<section class="embed-section" id="embed" aria-labelledby="embed-heading">
+  <div class="container">
+    <div class="embed-inner">
+      <div class="section-eyebrow" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="10" height="10"><path fill-rule="evenodd" d="M6.28 5.22a.75.75 0 010 1.06L2.56 10l3.72 3.72a.75.75 0 01-1.06 1.06L.97 10.53a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 0zm7.44 0a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 010-1.06z" clip-rule="evenodd" /></svg>
+        For Developers
+      </div>
+
+      <h2 id="embed-heading">Embed the community in your app</h2>
+      <p>One line of code to add a capability browser to your software. Your users browse and install without leaving your app.</p>
+
+      <div class="code-block" role="figure" aria-label="Embed code example">
+        <div class="code-block-header">
+          <div class="code-block-dots" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="code-block-lang">HTML</span>
+          <button class="copy-btn" id="copy-embed-btn" aria-label="Copy embed code">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true"><path d="M5.5 3.5A1.5 1.5 0 017 2h2.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 01.439 1.061V9.5A1.5 1.5 0 0112 11h-1v1.5A1.5 1.5 0 019.5 14h-4A1.5 1.5 0 014 12.5v-7A1.5 1.5 0 015.5 4v-.5zM7 3a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5V5.621a.5.5 0 00-.146-.353L9.232 3.146A.5.5 0 008.879 3H7z"/><path d="M4.5 6a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5v-1H7A1.5 1.5 0 015.5 11V6H4.5z"/></svg>
+            Copy
+          </button>
+        </div>
+        <pre><code id="embed-code-display"><span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="str">"https://scsp.dev/sdk/widget.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+<span class="tag">&lt;scsp-community</span>
+  <span class="attr">registry</span>=<span class="str">"https://raw.githubusercontent.com/scsp-community/registry/main/registry/index.json"</span>
+  <span class="attr">theme</span>=<span class="str">"auto"</span>
+  <span class="attr">max-height</span>=<span class="str">"600px"</span>
+<span class="tag">&gt;&lt;/scsp-community&gt;</span></code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     FOOTER
+     ========================================================= -->
+<footer role="contentinfo">
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-left">
+        <div class="footer-brand">
+          <div class="footer-brand-mark" aria-hidden="true">SC</div>
+          SCSP
+        </div>
+        <span class="footer-sep" aria-hidden="true">/</span>
+        <span class="footer-license">MIT License</span>
+      </div>
+
+      <ul class="footer-links" role="list">
+        <li>
+          <a href="https://github.com/scsp-community/scsp" target="_blank" rel="noopener noreferrer">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.154-1.11-1.461-1.11-1.461-.908-.62.069-.608.069-.608 1.004.07 1.532 1.032 1.532 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.252-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.337-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z"/></svg>
+            GitHub
+          </a>
+        </li>
+        <li>
+          <a href="https://github.com/scsp-community/scsp/blob/main/docs/PROTOCOL.md" target="_blank" rel="noopener noreferrer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+            PROTOCOL.md
+          </a>
+        </li>
+        <li>
+          <a href="embed-example.html">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" /></svg>
+            Embed Demo
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<!-- =========================================================
+     DETAIL MODAL (rendered by JS)
+     ========================================================= -->
+<div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-cap-title" hidden></div>
+
+<!-- =========================================================
+     TOAST (rendered by JS)
+     ========================================================= -->
+<div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:500;pointer-events:none;"></div>
+
+<script>
+/* ==========================================================
+   SCSP Community — Main Application Script
+   Pure vanilla JS, no dependencies, no build step
+   ========================================================== */
+
+/* ----------------------------------------------------------
+   Fallback data (used if registry fetch fails)
+   ---------------------------------------------------------- */
+const FALLBACK_CAPABILITIES = [
+  {
+    id: 'auth-totp-v1',
+    name: 'TOTP Two-Factor Authentication',
+    version: '1.0.0',
+    layer: 'module',
+    description: 'Adds RFC 6238-compliant TOTP 2FA to any SCSP-compatible app\'s login flow. Includes brute-force lockout, single-use recovery codes, and OWASP ASVS 2.8 compliance constraints.',
+    tags: ['auth', 'security', 'mfa', '2fa', 'totp'],
+    surfaces: { entities: ['User'], logic_domains: ['auth'], ui_areas: ['settings'] },
+    author_name: 'Alice Chen',
+    installs: 163,
+    active_installs: 147,
+    compatibility_score: 0.94,
+    rollback_rate: 0.02,
+    signed: true,
+    auto_review: { schema_valid: true, signed: true, ncv_self_check: true, dependency_audit: true },
+    components: [
+      { id: 'totp-backend', layer: 'module', optional: false, blast_radius: { structural_impact: ['Route', 'Middleware', 'DatabaseSchema'], dependency_depth: 2 } },
+      { id: 'totp-settings-ui', layer: 'component', optional: true, blast_radius: { structural_impact: ['UIComponent'], dependency_depth: 1 } }
+    ]
+  },
+  {
+    id: 'calendar-week-view-v1',
+    name: 'Calendar Week View',
+    version: '1.2.0',
+    layer: 'component',
+    description: '7-day week view with drag-and-drop event rescheduling. Compatible with React, Vue, and Svelte. Zero external dependencies beyond the host UI framework.',
+    tags: ['ui', 'calendar', 'drag-drop', 'scheduling'],
+    surfaces: { entities: ['Event'], logic_domains: ['scheduling'], ui_areas: ['dashboard', 'calendar'] },
+    author_name: 'Marco Rossi',
+    installs: 97,
+    active_installs: 89,
+    compatibility_score: 0.91,
+    rollback_rate: 0.01,
+    signed: true,
+    auto_review: { schema_valid: true, signed: true, ncv_self_check: true, dependency_audit: true },
+    components: [
+      { id: 'week-view-component', layer: 'component', optional: false, blast_radius: { structural_impact: ['UIComponent'], dependency_depth: 1 } }
+    ]
+  },
+  {
+    id: 'approval-workflow-v1',
+    name: 'Approval Workflow State Machine',
+    version: '2.0.1',
+    layer: 'behavior',
+    description: 'Multi-step approval state machine (draft \u2192 review \u2192 approved/rejected) with audit trail and email notifications. Supports configurable approver chains.',
+    tags: ['workflow', 'approval', 'audit', 'email', 'state-machine'],
+    surfaces: { entities: ['Document', 'User'], logic_domains: ['workflow', 'notifications'], ui_areas: ['document', 'settings'] },
+    author_name: 'Priya Sharma',
+    installs: 224,
+    active_installs: 203,
+    compatibility_score: 0.88,
+    rollback_rate: 0.04,
+    signed: true,
+    auto_review: { schema_valid: true, signed: true, ncv_self_check: true, dependency_audit: true },
+    components: [
+      { id: 'workflow-engine', layer: 'behavior', optional: false, blast_radius: { structural_impact: ['DatabaseSchema', 'Route', 'BackgroundJob'], dependency_depth: 3 } },
+      { id: 'email-notifier', layer: 'behavior', optional: true, blast_radius: { structural_impact: ['BackgroundJob'], dependency_depth: 1 } }
+    ]
+  },
+  {
+    id: 'perf-image-lazy-load-v1',
+    name: 'Image Lazy Loading',
+    version: '1.0.3',
+    layer: 'improvement',
+    description: 'IntersectionObserver-based lazy loading for image-heavy pages. Zero dependencies, progressive enhancement. Reduces initial page load by up to 60% on media-rich screens.',
+    tags: ['performance', 'images', 'lazy-load', 'optimization', 'zero-deps'],
+    surfaces: { entities: [], logic_domains: ['media'], ui_areas: ['global'] },
+    author_name: 'Kai Müller',
+    installs: 451,
+    active_installs: 412,
+    compatibility_score: 0.97,
+    rollback_rate: 0.005,
+    signed: true,
+    auto_review: { schema_valid: true, signed: true, ncv_self_check: true, dependency_audit: true },
+    components: [
+      { id: 'lazy-load-observer', layer: 'improvement', optional: false, blast_radius: { structural_impact: ['UIComponent'], dependency_depth: 0 } }
+    ]
+  }
+];
+
+/* ----------------------------------------------------------
+   State
+   ---------------------------------------------------------- */
+let allCapabilities = [];
+let activeLayerFilter = 'all';
+let activeSurfaceFilter = null;
+let searchQuery = '';
+
+/* ----------------------------------------------------------
+   Registry fetch
+   ---------------------------------------------------------- */
+async function loadCapabilities() {
+  const endpoints = [
+    '../registry/index.json',
+    './registry/index.json',
+    'https://raw.githubusercontent.com/scsp-community/registry/main/registry/index.json'
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { cache: 'no-cache' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.capabilities && Array.isArray(data.capabilities)) {
+        return data.capabilities;
+      }
+    } catch (_) {
+      // try next endpoint
+    }
+  }
+
+  console.info('[SCSP] Registry fetch failed — using built-in fallback data.');
+  return FALLBACK_CAPABILITIES;
+}
+
+/* ----------------------------------------------------------
+   Layer config
+   ---------------------------------------------------------- */
+const LAYER_CONFIG = {
+  module:      { label: 'Module',      icon: '&#9632;', cls: 'module' },
+  component:   { label: 'Component',   icon: '&#11045;', cls: 'component' },
+  behavior:    { label: 'Behavior',    icon: '&#8594;', cls: 'behavior' },
+  improvement: { label: 'Improvement', icon: '&#8679;', cls: 'improvement' }
+};
+
+function getLayerConfig(layer) {
+  return LAYER_CONFIG[layer] || { label: layer, icon: '&#9679;', cls: 'module' };
+}
+
+/* ----------------------------------------------------------
+   Escape HTML
+   ---------------------------------------------------------- */
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ----------------------------------------------------------
+   Format numbers
+   ---------------------------------------------------------- */
+function fmt(n) {
+  if (n === undefined || n === null) return '—';
+  return Number(n).toLocaleString();
+}
+
+/* ----------------------------------------------------------
+   Capability Card HTML
+   ---------------------------------------------------------- */
+function renderCard(cap) {
+  const lc = getLayerConfig(cap.layer);
+  const rollback = cap.rollback_rate != null
+    ? `${(cap.rollback_rate * 100).toFixed(1)}%`
+    : '—';
+  const compat = cap.compatibility_score != null
+    ? `${Math.round(cap.compatibility_score * 100)}%`
+    : '—';
+  const tags = (cap.tags || []).slice(0, 5).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+
+  return `
+    <article class="cap-card" role="listitem" tabindex="0"
+             data-id="${esc(cap.id)}"
+             aria-label="${esc(cap.name)} capability"
+             onclick="openModal('${esc(cap.id)}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){openModal('${esc(cap.id)}');}">
+      <div class="cap-card-header">
+        <div>
+          <div class="cap-card-name">${esc(cap.name)}</div>
+          <div class="cap-card-desc">${esc(cap.description)}</div>
+        </div>
+        <span class="layer-badge ${lc.cls}" aria-label="Type: ${lc.label}">${lc.label}</span>
+      </div>
+
+      ${tags ? `<div class="cap-card-tags" aria-label="Tags">${tags}</div>` : ''}
+
+      <div class="cap-card-stats">
+        <div class="stat">
+          <span class="stat-icon" aria-hidden="true">✦</span>
+          <span class="stat-value">${fmt(cap.active_installs)}</span>
+          <span>installs</span>
+        </div>
+        <div class="stat rollback">
+          <span class="stat-icon" aria-hidden="true">↩</span>
+          <span class="stat-value">${rollback}</span>
+          <span>rollback</span>
+        </div>
+        <div class="stat compat">
+          <span class="stat-icon" aria-hidden="true">★</span>
+          <span class="stat-value">${compat}</span>
+          <span>compat</span>
+        </div>
+      </div>
+
+      <div class="cap-card-actions">
+        <button class="install-btn"
+                aria-label="Copy install command for ${esc(cap.name)}"
+                onclick="event.stopPropagation(); copyInstall('${esc(cap.id)}')">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 3.5A1.5 1.5 0 017 2h2.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 01.439 1.061V9.5A1.5 1.5 0 0112 11h-1v1.5A1.5 1.5 0 019.5 14h-4A1.5 1.5 0 014 12.5v-7A1.5 1.5 0 015.5 4v-.5zM7 3a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5V5.621a.5.5 0 00-.146-.353L9.232 3.146A.5.5 0 008.879 3H7z"/><path d="M4.5 6a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5v-1H7A1.5 1.5 0 015.5 11V6H4.5z"/></svg>
+          Install
+        </button>
+        <a class="view-scsp-link"
+           href="#"
+           aria-label="View .scsp file for ${esc(cap.name)}"
+           onclick="event.preventDefault(); event.stopPropagation(); openModal('${esc(cap.id)}');">
+          View .scsp
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="12" height="12" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" /></svg>
+        </a>
+      </div>
+    </article>
+  `;
+}
+
+/* ----------------------------------------------------------
+   Filtering & Rendering
+   ---------------------------------------------------------- */
+const SURFACE_TAG_MAP = {
+  auth:        ['auth', 'security', 'mfa', '2fa'],
+  ui:          ['ui', 'calendar', 'drag-drop', 'component'],
+  workflow:    ['workflow', 'approval', 'audit'],
+  performance: ['performance', 'optimization', 'lazy-load']
+};
+
+function matchesSurfaceFilter(cap, surface) {
+  if (!surface) return true;
+  const keywords = SURFACE_TAG_MAP[surface] || [surface];
+  const capTags = cap.tags || [];
+  return keywords.some(k => capTags.some(t => t.toLowerCase().includes(k)));
+}
+
+function applyFilters() {
+  const query = searchQuery.toLowerCase().trim();
+
+  const filtered = allCapabilities.filter(cap => {
+    // Layer filter
+    if (activeLayerFilter !== 'all' && cap.layer !== activeLayerFilter) return false;
+
+    // Surface filter
+    if (!matchesSurfaceFilter(cap, activeSurfaceFilter)) return false;
+
+    // Search query
+    if (query) {
+      const haystack = [
+        cap.name, cap.description, ...(cap.tags || [])
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    }
+
+    return true;
+  });
+
+  renderGrid(filtered);
+}
+
+function renderGrid(capabilities) {
+  const grid = document.getElementById('capabilities-grid');
+  const count = document.getElementById('result-count');
+
+  if (capabilities.length === 0) {
+    grid.innerHTML = `
+      <div class="state-message" role="status">
+        <h3>No capabilities found</h3>
+        <p>Try a different search term or clear the filters.</p>
+      </div>`;
+    count.textContent = '0 results';
+    return;
+  }
+
+  grid.innerHTML = capabilities.map(renderCard).join('');
+  count.textContent = `${capabilities.length} ${capabilities.length === 1 ? 'result' : 'results'}`;
+}
+
+/* ----------------------------------------------------------
+   Chip Filter Interactions
+   ---------------------------------------------------------- */
+document.querySelectorAll('[data-filter]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const filterType = chip.dataset.filter;
+    const value = chip.dataset.value;
+
+    if (filterType === 'layer') {
+      // Deactivate all layer chips, activate clicked
+      document.querySelectorAll('[data-filter="layer"]').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeLayerFilter = value;
+    } else if (filterType === 'surface') {
+      // Toggle surface filter
+      if (activeSurfaceFilter === value) {
+        chip.classList.remove('active');
+        activeSurfaceFilter = null;
+      } else {
+        document.querySelectorAll('[data-filter="surface"]').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        activeSurfaceFilter = value;
+      }
+    }
+
+    applyFilters();
+  });
+});
+
+/* ----------------------------------------------------------
+   Search Input
+   ---------------------------------------------------------- */
+const searchInput = document.getElementById('search-input');
+let searchDebounce;
+searchInput.addEventListener('input', e => {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    searchQuery = e.target.value;
+    applyFilters();
+  }, 200);
+});
+
+/* ----------------------------------------------------------
+   Toast
+   ---------------------------------------------------------- */
+function showToast(message, icon = '✓') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.setAttribute('role', 'status');
+  toast.innerHTML = `<span aria-hidden="true">${icon}</span> ${esc(message)}`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 2200);
+}
+
+/* ----------------------------------------------------------
+   Copy Install Command
+   ---------------------------------------------------------- */
+async function copyInstall(id) {
+  const cmd = `scsp install ${id}`;
+  try {
+    await navigator.clipboard.writeText(cmd);
+    showToast(`Copied: ${cmd}`);
+  } catch (_) {
+    // Fallback for non-secure contexts
+    const ta = document.createElement('textarea');
+    ta.value = cmd;
+    ta.style.cssText = 'position:fixed;opacity:0;top:-100px;';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast(`Copied: ${cmd}`);
+  }
+}
+
+/* ----------------------------------------------------------
+   Modal
+   ---------------------------------------------------------- */
+function openModal(id) {
+  const cap = allCapabilities.find(c => c.id === id);
+  if (!cap) return;
+
+  const overlay = document.getElementById('modal-overlay');
+  overlay.removeAttribute('hidden');
+  overlay.innerHTML = buildModalHTML(cap);
+
+  // Focus management
+  const closeBtn = overlay.querySelector('.modal-close-btn');
+  if (closeBtn) closeBtn.focus();
+
+  // Close on overlay click
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeModal();
+  });
+
+  // Close on Escape
+  document._modalKeyHandler = e => {
+    if (e.key === 'Escape') closeModal();
+  };
+  document.addEventListener('keydown', document._modalKeyHandler);
+
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  const overlay = document.getElementById('modal-overlay');
+  overlay.setAttribute('hidden', '');
+  overlay.innerHTML = '';
+  document.body.style.overflow = '';
+  document.removeEventListener('keydown', document._modalKeyHandler);
+}
+
+function buildModalHTML(cap) {
+  const lc = getLayerConfig(cap.layer);
+  const rollback = cap.rollback_rate != null ? `${(cap.rollback_rate * 100).toFixed(1)}%` : '—';
+  const compat = cap.compatibility_score != null ? `${Math.round(cap.compatibility_score * 100)}%` : '—';
+
+  // Auto-review badges
+  const ar = cap.auto_review || {};
+  const badges = [
+    { key: 'schema_valid',    label: 'Schema Valid' },
+    { key: 'signed',          label: 'Signed' },
+    { key: 'ncv_self_check',  label: 'NCV Check' },
+    { key: 'dependency_audit', label: 'Dep Audit' }
+  ].filter(b => ar[b.key]).map(b => `
+    <span class="review-badge pass" aria-label="${b.label} passed">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" /></svg>
+      ${b.label}
+    </span>
+  `).join('');
+
+  // Surfaces
+  const allSurfaces = [];
+  if (cap.surfaces) {
+    const s = cap.surfaces;
+    if (Array.isArray(s)) {
+      allSurfaces.push(...s);
+    } else {
+      Object.keys(s).forEach(k => {
+        const vals = s[k];
+        if (Array.isArray(vals) && vals.length > 0) {
+          vals.forEach(v => allSurfaces.push(`${k}:${v}`));
+        } else if (typeof vals === 'string') {
+          allSurfaces.push(`${k}:${vals}`);
+        } else {
+          allSurfaces.push(k);
+        }
+      });
+    }
+  }
+  const surfacesHTML = allSurfaces.slice(0, 8).map(s =>
+    `<span class="surface-tag">${esc(s)}</span>`
+  ).join('');
+
+  // Components
+  const components = cap.components || [];
+  const componentsHTML = components.map(c => {
+    const depth = c.blast_radius?.dependency_depth ?? 0;
+    const maxDots = 4;
+    const dots = Array.from({ length: maxDots }, (_, i) => {
+      const filled = i < depth;
+      const high = depth >= 3 && filled;
+      return `<span class="blast-dot ${filled ? 'filled' : ''} ${high ? 'high' : ''}" aria-hidden="true"></span>`;
+    }).join('');
+    const impacts = (c.blast_radius?.structural_impact || []).join(', ');
+    return `
+      <div class="component-item">
+        <div class="component-info">
+          <span class="component-id">${esc(c.id)}</span>
+          ${impacts ? `<span class="component-optional" title="Structural impact">${esc(impacts)}</span>` : ''}
+          ${c.optional ? `<span class="component-optional">Optional</span>` : ''}
+        </div>
+        <div class="blast-radius">
+          <span class="blast-label">Blast radius</span>
+          <div class="blast-depth">
+            <div class="blast-dots" aria-label="Depth ${depth} of ${maxDots}">${dots}</div>
+            <span>depth ${depth}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const tags = (cap.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+
+  return `
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="modal-cap-title">${esc(cap.name)}</div>
+          <div class="modal-meta">
+            <span class="layer-badge ${lc.cls}">${lc.label}</span>
+            <span class="modal-version">v${esc(cap.version)}</span>
+            ${cap.author_name ? `<span class="modal-version">by ${esc(cap.author_name)}</span>` : ''}
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal()" aria-label="Close modal">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="16" height="16" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Description -->
+        <div class="modal-section">
+          <p style="color:var(--color-text-secondary);line-height:1.65;">${esc(cap.description)}</p>
+          ${tags ? `<div class="cap-card-tags" style="margin-top:.5rem;">${tags}</div>` : ''}
+        </div>
+
+        <!-- Quick Install -->
+        <div class="modal-section">
+          <div class="modal-section-title">Quick Install</div>
+          <div class="install-box">
+            <div class="install-box-label">Terminal</div>
+            <div class="install-box-content">
+              <code class="install-cmd">scsp install ${esc(cap.id)}</code>
+              <button class="copy-btn" id="modal-copy-btn" onclick="modalCopy('${esc(cap.id)}')" aria-label="Copy install command">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true"><path d="M5.5 3.5A1.5 1.5 0 017 2h2.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 01.439 1.061V9.5A1.5 1.5 0 0112 11h-1v1.5A1.5 1.5 0 019.5 14h-4A1.5 1.5 0 014 12.5v-7A1.5 1.5 0 015.5 4v-.5zM7 3a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5V5.621a.5.5 0 00-.146-.353L9.232 3.146A.5.5 0 008.879 3H7z"/><path d="M4.5 6a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5v-1H7A1.5 1.5 0 015.5 11V6H4.5z"/></svg>
+                Copy
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Auto-review -->
+        ${badges ? `
+        <div class="modal-section">
+          <div class="modal-section-title">Automated Review</div>
+          <div class="auto-review-badges">${badges}</div>
+        </div>` : ''}
+
+        <!-- Stats -->
+        <div class="modal-section">
+          <div class="modal-section-title">Community Stats</div>
+          <div class="cap-card-stats" style="border:none;padding:0;">
+            <div class="stat">
+              <span class="stat-icon" aria-hidden="true">✦</span>
+              <span class="stat-value">${fmt(cap.active_installs)}</span>
+              <span>active installs</span>
+            </div>
+            <div class="stat rollback">
+              <span class="stat-icon" aria-hidden="true">↩</span>
+              <span class="stat-value">${rollback}</span>
+              <span>rollback rate</span>
+            </div>
+            <div class="stat compat">
+              <span class="stat-icon" aria-hidden="true">★</span>
+              <span class="stat-value">${compat}</span>
+              <span>compatibility</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Compatible with (surfaces) -->
+        ${surfacesHTML ? `
+        <div class="modal-section">
+          <div class="modal-section-title">Compatible Surfaces &amp; Anchors</div>
+          <div class="surfaces-list">${surfacesHTML}</div>
+        </div>` : ''}
+
+        <!-- Components -->
+        ${componentsHTML ? `
+        <div class="modal-section">
+          <div class="modal-section-title">Components</div>
+          <div class="components-list">${componentsHTML}</div>
+        </div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+async function modalCopy(id) {
+  const btn = document.getElementById('modal-copy-btn');
+  await copyInstall(id);
+  if (btn) {
+    btn.classList.add('copied');
+    btn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" /></svg>
+      Copied!`;
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true"><path d="M5.5 3.5A1.5 1.5 0 017 2h2.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 01.439 1.061V9.5A1.5 1.5 0 0112 11h-1v1.5A1.5 1.5 0 019.5 14h-4A1.5 1.5 0 014 12.5v-7A1.5 1.5 0 015.5 4v-.5zM7 3a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5V5.621a.5.5 0 00-.146-.353L9.232 3.146A.5.5 0 008.879 3H7z"/><path d="M4.5 6a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5v-1H7A1.5 1.5 0 015.5 11V6H4.5z"/></svg>
+        Copy`;
+    }, 2000);
+  }
+}
+
+/* ----------------------------------------------------------
+   Embed copy button
+   ---------------------------------------------------------- */
+document.getElementById('copy-embed-btn').addEventListener('click', async function() {
+  const code = `<script src="https://scsp.dev/sdk/widget.js"><\/script>\n<scsp-community\n  registry="https://raw.githubusercontent.com/scsp-community/registry/main/registry/index.json"\n  theme="auto"\n  max-height="600px"\n><\/scsp-community>`;
+  try {
+    await navigator.clipboard.writeText(code);
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = code;
+    ta.style.cssText = 'position:fixed;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  this.classList.add('copied');
+  this.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" /></svg> Copied!`;
+  setTimeout(() => {
+    this.classList.remove('copied');
+    this.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden="true"><path d="M5.5 3.5A1.5 1.5 0 017 2h2.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 01.439 1.061V9.5A1.5 1.5 0 0112 11h-1v1.5A1.5 1.5 0 019.5 14h-4A1.5 1.5 0 014 12.5v-7A1.5 1.5 0 015.5 4v-.5zM7 3a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5V5.621a.5.5 0 00-.146-.353L9.232 3.146A.5.5 0 008.879 3H7z"/><path d="M4.5 6a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h4a.5.5 0 00.5-.5v-1H7A1.5 1.5 0 015.5 11V6H4.5z"/></svg> Copy`;
+  }, 2000);
+});
+
+/* ----------------------------------------------------------
+   Smooth scroll for Browse CTA
+   ---------------------------------------------------------- */
+document.querySelectorAll('a[href="#capabilities"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    document.getElementById('capabilities').scrollIntoView({ behavior: 'smooth' });
+  });
+});
+
+/* ----------------------------------------------------------
+   Init
+   ---------------------------------------------------------- */
+(async function init() {
+  try {
+    allCapabilities = await loadCapabilities();
+    renderGrid(allCapabilities);
+  } catch (err) {
+    console.error('[SCSP] Fatal error loading capabilities:', err);
+    allCapabilities = FALLBACK_CAPABILITIES;
+    renderGrid(allCapabilities);
+  }
+})();
+</script>
+</body>
+</html>

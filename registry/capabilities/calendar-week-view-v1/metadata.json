@@ -1,0 +1,25 @@
+{
+  "id": "calendar-week-view-v1",
+  "pricing": {
+    "model": "free"
+  },
+  "preview_url": "https://scsp.dev/preview/calendar-week-view-v1",
+  "screenshots": [],
+  "reports": {
+    "success": 87,
+    "fail": 1,
+    "rollback": 1,
+    "sample_size": 89
+  },
+  "installs": 97,
+  "active_installs": 89,
+  "fork_count": 7,
+  "stack_depth": 1,
+  "compatibility_score": 0.91,
+  "auto_review": {
+    "schema_valid": true,
+    "ncv_self_check": "pass",
+    "dependency_audit": "clean",
+    "signed": true
+  }
+}

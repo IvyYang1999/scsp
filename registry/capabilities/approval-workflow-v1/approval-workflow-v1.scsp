@@ -1,0 +1,527 @@
+---
+scsp: "0.1"
+id: approval-workflow-v1
+name: "Document Approval Workflow"
+version: "1.0.0"
+tags: ["workflow", "collaboration", "enterprise"]
+
+author:
+  name: carol
+  key: "ed25519:MCowBQYDK2VwAyEA9t4mNqR8wYpLsF6kJiCeZbDhUxOvGmAqWnTrKfHsP2X="
+signature: "ed25519:9b3e6a1d4f7c0a2e5d8b1e4a7d0c3f6a9e2b5d8a1f4d7a0e3b6d9a2f5e8b1c4e7a0d3f6a9b2e5d8a1e4f7d"
+created: "2026-04-10T08:00:00Z"
+revoked: false
+
+env_hint:
+  runtime:
+    - "node>=18"
+    - "python>=3.11"
+    - "java>=17"
+  frameworks:
+    - express
+    - fastapi
+    - nestjs
+    - django
+    - spring-boot
+
+requires:
+  manifest_version: ">=0.1"
+  surfaces:
+    entities:
+      - User
+      - Document
+    logic_domains:
+      - notification
+    ui_areas:
+      - documents
+      - dashboard
+  anchors:
+    hooks:
+      - document.save.post_write
+      - notification.send.pre_dispatch
+    slots:
+      - documents.action-bar
+      - documents.detail.sidebar
+      - dashboard.pending-actions
+    entities:
+      - User
+      - Document
+
+components:
+  - id: workflow-engine
+    layer: behavior
+    optional: false
+    surfaces_touched:
+      - documents
+      - User
+      - Document
+    anchors_used:
+      - document.save.post_write
+      - User
+      - Document
+    blast_radius:
+      structural_impact:
+        - Route
+        - Middleware
+        - DatabaseSchema
+        - BackgroundJob
+      dependency_depth: 3
+    rollback:
+      stateless: snapshot-based
+      stateful:
+        - type: schema_migration
+          down: >
+            DROP TABLE IF EXISTS workflow_transitions;
+            DROP TABLE IF EXISTS workflow_approvals;
+            DROP TABLE IF EXISTS workflow_instances;
+            ALTER TABLE documents DROP COLUMN IF EXISTS workflow_state;
+            ALTER TABLE documents DROP COLUMN IF EXISTS submitted_at;
+            ALTER TABLE documents DROP COLUMN IF EXISTS approved_at;
+    permissions:
+      surfaces_writable:
+        - documents
+        - User
+        - Document
+      schema_migration: true
+      external_deps:
+        - nodemailer
+        - sendgrid
+        - resend
+
+  - id: approval-ui
+    layer: component
+    optional: false
+    depends_on:
+      - workflow-engine
+    surfaces_touched:
+      - documents
+      - dashboard
+    anchors_used:
+      - documents.action-bar
+      - documents.detail.sidebar
+      - dashboard.pending-actions
+    blast_radius:
+      structural_impact:
+        - UI
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - documents
+        - dashboard
+
+  - id: notification-hooks
+    layer: module
+    optional: true
+    depends_on:
+      - workflow-engine
+    surfaces_touched:
+      - notification
+    anchors_used:
+      - notification.send.pre_dispatch
+    blast_radius:
+      structural_impact:
+        - BackgroundJob
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - notification
+      external_deps:
+        - nodemailer
+        - sendgrid
+        - resend
+
+conflicts: []
+
+risk_factors:
+  auto_derived: true
+  additional:
+    - "Approval workflow state is stored in a separate table linked to documents. Deleting a document while a workflow is in progress leaves orphaned workflow_instances rows — the rollback migration handles cleanup."
+    - "Notification delivery depends on the host's notification domain configuration. If no email provider is configured, notification-hooks component will install but notifications will be silently dropped."
+---
+
+## Intent
+
+Document Approval Workflow adds a structured, multi-step review and sign-off process to any document or content entity in the host application. Documents move through a clearly defined state machine from draft creation through final approval or rejection, with full audit trail, configurable approver assignment, and in-app/email notifications at each transition.
+
+**Motivation.** Teams managing policies, contracts, blog posts, design specs, or any other documents with a review requirement consistently resort to manual email chains or external tools (Google Docs comments, Notion shares) because their application has no built-in approval gate. This capability adds that gate directly, keeping the full lifecycle — draft, review, approval, publication — inside the host application.
+
+**Design principles.**
+- State machine correctness over flexibility: transitions are validated server-side. No client can move a document to `Approved` without going through `UnderReview`. Invalid transitions return 409 Conflict.
+- Immutable audit trail: every state transition is recorded in `workflow_transitions` with actor, timestamp, and optional comment. This table is append-only — transitions cannot be deleted or modified.
+- Configurable approver pool: the workflow engine supports a single required approver (simplest case), an ordered chain (sequential approval), and a quorum (N-of-M). Defaults to single approver.
+- Notification decoupling: the `notification-hooks` component is optional. If the host's notification domain is unavailable, the workflow runs correctly — users simply check their dashboard for pending actions.
+- Non-blocking on the author: once submitted, a document is locked from editing but the author is not blocked from creating new documents. An author can withdraw a submission to return it to Draft for editing.
+
+**Behavior state machine.**
+```
+[Draft]
+    │  author clicks "Submit for Review" → POST /workflow/submit
+    ▼
+[Submitted]   ← assignedApprovers notified
+    │  approver clicks "Start Review" → POST /workflow/begin-review
+    ▼
+[UnderReview]
+    ├─ approver clicks "Approve" → POST /workflow/approve
+    │       ▼
+    │   [Approved]
+    │       │  (optional) author or system clicks "Archive"
+    │       ▼
+    │   [Archived]
+    │
+    ├─ approver clicks "Request Changes" → POST /workflow/request-changes
+    │       ▼
+    │   [Draft]  (document unlocked, author notified, previous feedback preserved)
+    │
+    └─ approver clicks "Reject" → POST /workflow/reject
+            ▼
+        [Rejected]  ← terminal state; document read-only; author notified
+
+[Draft | Submitted | UnderReview]
+    │  author clicks "Withdraw" → POST /workflow/withdraw
+    ▼
+[Draft]  (workflow instance reset, approvers notified of withdrawal)
+```
+
+```yaml probes:
+- id: probe-user-entity
+  target: entity
+  surface: User
+  description: "Verify the User entity exists with id, email, and a role or permissions field for approver assignment."
+  check:
+    type: entity_fields
+    entity: User
+    required_fields:
+      - name: id
+        types: [string, uuid, integer]
+      - name: email
+        types: [string]
+    optional_preferred:
+      - name: role
+      - name: permissions
+  on_fail: abort
+  message: "User entity is required for approver assignment. The workflow engine cannot function without it."
+
+- id: probe-document-entity
+  target: entity
+  surface: Document
+  description: "Verify the Document entity exists with at minimum id, title, and a foreign key to User (author/owner)."
+  check:
+    type: entity_fields
+    entity: Document
+    required_fields:
+      - name: id
+        types: [string, uuid, integer]
+      - name: title
+        types: [string]
+    optional_preferred:
+      - name: author_id
+      - name: owner_id
+      - name: created_by
+  on_fail: abort
+  message: "Document entity not found. This capability attaches workflow state to Document records."
+
+- id: probe-document-save-hook
+  target: hook
+  surface: documents
+  description: "Verify document.save.post_write hook exists to intercept saves and enforce workflow lock on non-Draft documents."
+  check:
+    type: hook_exists
+    hook: document.save.post_write
+    hook_signature:
+      receives: [document_id, actor_id, changeset]
+      can_short_circuit: true
+  on_fail: warn
+  message: "document.save.post_write hook not found. The workflow engine will install edit-lock enforcement via a separate middleware route instead. Behavior is equivalent but less performant."
+
+- id: probe-notification-domain
+  target: logic_domain
+  surface: notification
+  description: "Check that the notification logic domain is available for email and in-app alerts on workflow transitions."
+  check:
+    type: domain_exists
+    domain: notification
+  on_fail: skip
+  message: "Notification domain not found. The notification-hooks component will be skipped. Workflow functionality is unaffected — users will rely on the dashboard for pending action visibility."
+
+- id: probe-dashboard-slot
+  target: slot
+  surface: dashboard
+  description: "Verify dashboard.pending-actions slot exists for the Pending Approvals widget."
+  check:
+    type: slot_exists
+    slot: dashboard.pending-actions
+    accepts: [widget, panel]
+  on_fail: warn
+  message: "dashboard.pending-actions slot not found. The Pending Approvals dashboard widget will be skipped."
+```
+
+```yaml ncv:
+- id: no-invalid-state-transition
+  constraint: "State transitions MUST be validated against the defined state machine on the server. Client-supplied target states must be rejected if they are not valid successor states for the document's current workflow_state. Direct database manipulation bypassing the transition API is a critical violation."
+  enforcement: contract
+  check:
+    valid_transitions:
+      Draft: [Submitted]
+      Submitted: [UnderReview, Draft]   # Draft = withdraw
+      UnderReview: [Approved, Rejected, Draft]
+      Approved: [Archived]
+      Rejected: []
+      Archived: []
+  severity: critical
+
+- id: no-approver-self-approval
+  constraint: "A document's author MUST NOT be permitted to approve their own submission, regardless of their role. The workflow engine must check that the actor on POST /workflow/approve is not the document's author_id."
+  enforcement: contract
+  check:
+    field_inequality:
+      actor_id: "!= document.author_id"
+  severity: high
+
+- id: no-audit-trail-mutation
+  constraint: "The workflow_transitions table is append-only. No UPDATE or DELETE operations are permitted on this table after row insertion. This must be enforced at the database level (trigger or row-level security) in addition to application-level guards."
+  enforcement: static_analysis
+  patterns:
+    - language: sql
+      forbidden_patterns:
+        - "UPDATE workflow_transitions"
+        - "DELETE FROM workflow_transitions"
+    - language: any
+      forbidden_in: [ORM calls, query builders]
+      pattern: "workflow_transitions.*update|workflow_transitions.*delete"
+  severity: critical
+
+- id: no-edit-on-locked-document
+  constraint: "Documents in Submitted, UnderReview, Approved, or Archived states MUST reject content edits with 423 Locked. Only metadata edits (tags, labels) defined as non-content fields are permitted."
+  enforcement: contract
+  severity: high
+```
+
+```yaml fixtures:
+- id: author_user
+  type: entity
+  entity: User
+  data:
+    id: "usr_author_001"
+    email: "author@example.com"
+    role: "editor"
+
+- id: approver_user
+  type: entity
+  entity: User
+  data:
+    id: "usr_approver_001"
+    email: "approver@example.com"
+    role: "manager"
+
+- id: draft_document
+  type: entity
+  entity: Document
+  data:
+    id: "doc_001"
+    title: "Q2 Marketing Strategy"
+    author_id: "usr_author_001"
+    workflow_state: "Draft"
+    content: "Lorem ipsum..."
+
+- id: submitted_document
+  type: entity
+  entity: Document
+  data:
+    id: "doc_002"
+    title: "Security Policy v3"
+    author_id: "usr_author_001"
+    workflow_state: "Submitted"
+    submitted_at: "2026-04-15T10:00:00Z"
+
+- id: workflow_instance_submitted
+  type: entity
+  entity: workflow_instances
+  data:
+    id: "wfi_001"
+    document_id: "doc_002"
+    assigned_approvers: ["usr_approver_001"]
+    approval_mode: "single"
+    current_state: "Submitted"
+    created_at: "2026-04-15T10:00:00Z"
+```
+
+```yaml contracts:
+- id: contract-submit-transitions-state
+  description: "Submitting a Draft document transitions it to Submitted, creates a workflow_instance, assigns approvers, and fires notifications."
+  given:
+    fixture: draft_document
+    fixture: author_user
+    fixture: approver_user
+  when:
+    action: POST /workflow/submit
+    body:
+      document_id: "doc_001"
+      approver_ids: ["usr_approver_001"]
+    authenticated_as: author_user
+  then:
+    - response.status: 200
+    - response.body.workflow_state: "Submitted"
+    - db.documents["doc_001"].workflow_state: "Submitted"
+    - db.workflow_instances: contains({document_id: "doc_001", current_state: "Submitted"})
+    - db.workflow_transitions: contains({document_id: "doc_001", from_state: "Draft", to_state: "Submitted", actor_id: "usr_author_001"})
+    - notification.sent_to: ["approver@example.com"]
+
+- id: contract-approve-transitions-to-approved
+  description: "An assigned approver can approve a document in UnderReview state. The document transitions to Approved."
+  given:
+    fixture: submitted_document
+    state_override: {workflow_state: "UnderReview"}
+    fixture: approver_user
+  when:
+    action: POST /workflow/approve
+    body:
+      document_id: "doc_002"
+      comment: "Looks great, approved."
+    authenticated_as: approver_user
+  then:
+    - response.status: 200
+    - response.body.workflow_state: "Approved"
+    - db.documents["doc_002"].workflow_state: "Approved"
+    - db.documents["doc_002"].approved_at: not_null
+    - db.workflow_transitions: contains({to_state: "Approved", actor_id: "usr_approver_001", comment: "Looks great, approved."})
+    - notification.sent_to: ["author@example.com"]
+
+- id: contract-invalid-transition-rejected
+  description: "Attempting to approve a document that is still in Draft (not yet UnderReview) returns 409 Conflict."
+  given:
+    fixture: draft_document
+    fixture: approver_user
+  when:
+    action: POST /workflow/approve
+    body:
+      document_id: "doc_001"
+    authenticated_as: approver_user
+  then:
+    - response.status: 409
+    - response.body.error: "invalid_transition"
+    - response.body.current_state: "Draft"
+    - response.body.allowed_actions: ["submit", "edit"]
+    - db.documents["doc_001"].workflow_state: "Draft"   # unchanged
+
+- id: contract-self-approval-forbidden
+  description: "An author cannot approve their own document even if they have an approver role."
+  given:
+    fixture: submitted_document
+    state_override: {workflow_state: "UnderReview", assigned_approvers: ["usr_author_001"]}
+    fixture: author_user
+  when:
+    action: POST /workflow/approve
+    body:
+      document_id: "doc_002"
+    authenticated_as: author_user
+  then:
+    - response.status: 403
+    - response.body.error: "self_approval_forbidden"
+
+- id: contract-edit-locked-on-submission
+  description: "Attempting to edit the content of a Submitted document returns 423 Locked."
+  given:
+    fixture: submitted_document
+    fixture: author_user
+  when:
+    action: PUT /documents/doc_002
+    body:
+      content: "Trying to change content after submission"
+    authenticated_as: author_user
+  then:
+    - response.status: 423
+    - response.body.error: "document_locked"
+    - response.body.workflow_state: "Submitted"
+    - response.body.unlock_hint: "Withdraw submission to return document to Draft"
+```
+
+```yaml interfaces:
+- id: submit_for_review
+  description: "Submit a Draft document for review. Creates a workflow instance and assigns approvers."
+  method: POST
+  path: /workflow/submit
+  auth_required: true
+  request_body:
+    document_id:
+      type: string
+      required: true
+    approver_ids:
+      type: array
+      items: string
+      required: true
+      min_items: 1
+    approval_mode:
+      type: string
+      enum: [single, sequential, quorum]
+      default: single
+    quorum_threshold:
+      type: integer
+      description: "Required only when approval_mode is 'quorum'. Number of approvals needed."
+    due_date:
+      type: string
+      format: ISO-8601
+      required: false
+  response:
+    200:
+      workflow_state: "Submitted"
+      workflow_instance_id: string
+      assigned_approvers: array
+    403:
+      error: "not_document_author"
+    409:
+      error: "invalid_transition | workflow_already_active"
+
+- id: transition_workflow
+  description: "Generic transition endpoint for approver actions: begin-review, approve, request-changes, reject, withdraw, archive."
+  method: POST
+  path: "/workflow/{action}"
+  path_params:
+    action:
+      type: string
+      enum: [begin-review, approve, request-changes, reject, withdraw, archive]
+  auth_required: true
+  request_body:
+    document_id:
+      type: string
+      required: true
+    comment:
+      type: string
+      required: false
+      max_length: 2000
+  response:
+    200:
+      workflow_state: string
+      transitioned_at: string
+      actor_id: string
+    403:
+      error: "insufficient_permissions | self_approval_forbidden | not_assigned_approver"
+    409:
+      error: "invalid_transition"
+      current_state: string
+      allowed_actions: array
+
+- id: get_workflow_history
+  description: "Retrieve the full audit trail of transitions for a document."
+  method: GET
+  path: /workflow/{document_id}/history
+  auth_required: true
+  response:
+    200:
+      document_id: string
+      current_state: string
+      transitions:
+        type: array
+        items:
+          from_state: string
+          to_state: string
+          actor_id: string
+          actor_email: string
+          timestamp: string
+          comment: string
+```

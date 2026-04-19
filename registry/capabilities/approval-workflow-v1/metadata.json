@@ -1,0 +1,25 @@
+{
+  "id": "approval-workflow-v1",
+  "pricing": {
+    "model": "free"
+  },
+  "preview_url": "https://scsp.dev/preview/approval-workflow-v1",
+  "screenshots": [],
+  "reports": {
+    "success": 191,
+    "fail": 8,
+    "rollback": 4,
+    "sample_size": 203
+  },
+  "installs": 224,
+  "active_installs": 203,
+  "fork_count": 19,
+  "stack_depth": 3,
+  "compatibility_score": 0.88,
+  "auto_review": {
+    "schema_valid": true,
+    "ncv_self_check": "pass",
+    "dependency_audit": "clean",
+    "signed": true
+  }
+}

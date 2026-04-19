@@ -1,0 +1,25 @@
+{
+  "id": "perf-image-lazy-load-v1",
+  "pricing": {
+    "model": "free"
+  },
+  "preview_url": "https://scsp.dev/preview/perf-image-lazy-load-v1",
+  "screenshots": [],
+  "reports": {
+    "success": 410,
+    "fail": 1,
+    "rollback": 0,
+    "sample_size": 411
+  },
+  "installs": 451,
+  "active_installs": 412,
+  "fork_count": 31,
+  "stack_depth": 0,
+  "compatibility_score": 0.97,
+  "auto_review": {
+    "schema_valid": true,
+    "ncv_self_check": "pass",
+    "dependency_audit": "clean",
+    "signed": true
+  }
+}

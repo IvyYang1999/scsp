@@ -1,0 +1,72 @@
+name: Deploy SCSP Community SDK to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'community-sdk/**'
+      - 'registry/**'
+
+  # Allow manual trigger from the Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one concurrent deployment, cancel in-progress runs
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify community-sdk files
+        run: |
+          echo "=== community-sdk contents ==="
+          ls -la community-sdk/
+          echo ""
+          echo "=== registry/index.json (first 30 lines) ==="
+          head -30 registry/index.json || echo "(registry/index.json not found — widget will use fallback data)"
+
+      - name: Prepare Pages artifact
+        # Copy community-sdk/ to a staging directory and include registry/
+        # so that index.html can fetch ../registry/index.json relative to
+        # the deployed root.
+        run: |
+          mkdir -p _site
+          cp -r community-sdk/. _site/
+          mkdir -p _site/../registry
+          cp -r registry _site/../registry 2>/dev/null || true
+          # Also copy registry next to index.html for relative path resolution
+          cp -r registry _site/registry 2>/dev/null || true
+          echo "=== _site contents ==="
+          ls -la _site/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

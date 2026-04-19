@@ -1,0 +1,331 @@
+---
+scsp: "0.1"
+id: perf-image-lazy-load-v1
+name: "Image Lazy Loading"
+version: "1.0.0"
+tags: ["performance", "images", "ux"]
+
+author:
+  name: dave
+  key: "ed25519:MCowBQYDK2VwAyEA3p9nKhQ7wZqMrG5jLiDfYtCbXvUoNmBeWsTkJpHrF8A="
+signature: "ed25519:5c2f8a1d4e7b0c3f6a9d2e5b8c1f4a7d0e3b6c9f2a5d8e1b4c7f0a3d6b9c2e5f8a1d4e7b0c3f6a9d2e5b8"
+created: "2026-04-12T14:30:00Z"
+revoked: false
+
+env_hint:
+  runtime:
+    - "node>=16"
+    - "deno>=1.30"
+    - "browser: IntersectionObserver API"
+  frameworks:
+    - react
+    - vue
+    - svelte
+    - vanilla-js
+    - nextjs
+    - nuxt
+
+requires:
+  manifest_version: ">=0.1"
+  surfaces:
+    ui_areas:
+      - any   # applies globally to all image rendering
+  anchors:
+    slots: []   # no slot injection needed; hooks into image rendering pipeline directly
+    hooks:
+      - render.image.pre_output
+
+components:
+  - id: lazy-load-core
+    layer: improvement
+    optional: false
+    surfaces_touched:
+      - any
+    anchors_used:
+      - render.image.pre_output
+    blast_radius:
+      structural_impact:
+        - UI
+      dependency_depth: 1
+    rollback:
+      stateless: snapshot-based
+      side_effects_isolated: true
+    permissions:
+      surfaces_writable:
+        - any
+      schema_migration: false
+      external_deps: []
+
+conflicts: []
+
+risk_factors:
+  auto_derived: true
+  additional:
+    - "Some server-side rendering setups pre-render img tags without JavaScript execution. In SSR contexts, images get loading='lazy' added to the HTML attribute directly — no JS observer needed, browser handles it natively. The JS observer path activates only as a progressive enhancement when native lazy loading is absent."
+    - "Images with explicit width/height attributes prevent Cumulative Layout Shift (CLS). This capability adds a lint check to warn when images lack dimensions."
+---
+
+## Intent
+
+Image Lazy Loading improves application performance by deferring the loading of off-screen images until they approach the user's viewport. It targets the two most impactful web performance metrics: Largest Contentful Paint (LCP) and Total Blocking Time (TBT), with typical real-world improvements of 30–60% on image-heavy pages.
+
+**Motivation.** Images are consistently the largest payload on web pages, accounting for 50–70% of page weight in the median web application. Loading all images immediately on page mount wastes bandwidth (hurting users on mobile/metered connections), blocks the main thread (worsening interactivity), and delays LCP (the primary Core Web Vitals metric used by Google for SEO ranking). Lazy loading is a zero-downside improvement: images that are visible load immediately, images that are not visible load only as needed.
+
+**Design principles.**
+- Zero external dependencies. Uses the browser-native `IntersectionObserver` API (supported in 97%+ of browsers as of 2026) with a synchronous `loading="lazy"` attribute fallback for environments where JS is not available (SSR, crawlers).
+- Progressive enhancement. Existing `<img>` tags without explicit lazy loading are enhanced non-destructively. Images that already have `loading="lazy"` are not double-wrapped.
+- LCP protection. Images in the initial viewport (above-the-fold) are detected and excluded from lazy loading — they get `loading="eager"` and a high-priority `fetchpriority="high"` attribute to ensure they load as fast as possible.
+- No layout shift. The capability validates that lazy images have explicit `width` and `height` attributes (or `aspect-ratio` CSS). Images without dimensions emit a console warning and are logged in the capability's install report.
+- Placeholder support. While a lazy image is loading, the capability replaces the `src` with a low-quality image placeholder (LQIP) or a solid color matching the image's dominant color, preventing blank white boxes.
+
+**How it works (technical detail).**
+```
+Page renders
+    │
+    ├─ For each <img> in the document:
+    │      ├─ Is it in the initial viewport? → loading="eager", fetchpriority="high", skip observer
+    │      └─ Is it below the fold?
+    │             ├─ Set src="" (prevents eager load)
+    │             ├─ Move real src to data-lazy-src
+    │             ├─ Set placeholder (LQIP or color)
+    │             └─ Register with IntersectionObserver (rootMargin: "200px")
+    │
+    └─ IntersectionObserver fires when image enters rootMargin zone:
+           ├─ Set img.src = img.dataset.lazySrc
+           ├─ img.onload → remove placeholder, fade in (CSS transition)
+           ├─ img.onerror → restore placeholder, emit warning
+           └─ observer.unobserve(img)
+```
+
+```yaml probes:
+- id: probe-render-hook-exists
+  target: hook
+  surface: any
+  description: "Verify that render.image.pre_output hook exists for augmenting image tags before they reach the DOM or HTML output."
+  check:
+    type: hook_exists
+    hook: render.image.pre_output
+    hook_signature:
+      receives: [element_or_props, render_context]
+      returns: element_or_props
+  on_fail: warn
+  message: "render.image.pre_output hook not found. Falling back to DOM mutation observer on DOMContentLoaded. Functionality is equivalent but applies after initial paint rather than before — may cause a brief flash on slow connections."
+
+- id: probe-intersection-observer-available
+  target: runtime
+  description: "Verify IntersectionObserver API is available in the target runtime."
+  check:
+    type: global_exists
+    global: IntersectionObserver
+    runtime_check: "typeof IntersectionObserver !== 'undefined'"
+  on_fail: warn
+  message: "IntersectionObserver not available. Will fall back to native loading='lazy' HTML attribute only. No JS-based placeholder or fade-in animations will be applied. Coverage: all modern browsers."
+
+- id: probe-no-conflicting-lazy-lib
+  target: dependency
+  description: "Check that no other lazy loading library (lazysizes, lozad, vanilla-lazyload) is already installed. Dual lazy loaders interfere with each other."
+  check:
+    type: package_absent
+    packages:
+      - lazysizes
+      - lozad
+      - vanilla-lazyload
+      - react-lazyload
+      - svelte-lazy
+  on_fail: abort
+  message: "An existing lazy loading library was detected. Installing a second will cause images to double-defer (never load). Remove the existing library or skip this capability."
+```
+
+```yaml ncv:
+- id: no-lcp-image-deferred
+  constraint: "Images that are in the initial viewport at page load MUST NOT be lazy loaded. Lazy loading an LCP candidate delays the most important render metric. The capability must detect above-the-fold images and explicitly set loading='eager' and fetchpriority='high' on them."
+  enforcement: contract
+  check:
+    viewport_detection:
+      method: getBoundingClientRect
+      threshold_px: 0   # any image with top < window.innerHeight is above fold
+      action_for_above_fold:
+        loading: eager
+        fetchpriority: high
+  severity: critical
+
+- id: no-missing-dimensions
+  constraint: "Lazy images MUST have explicit width and height attributes or a CSS aspect-ratio to prevent Cumulative Layout Shift (CLS). Images missing both should emit a console.warn and be included in the install report. CLS > 0.1 fails Core Web Vitals."
+  enforcement: runtime_contract
+  check:
+    per_image:
+      has_width_height: true
+      OR has_aspect_ratio_css: true
+    on_violation:
+      action: warn
+      include_in_report: true
+  severity: medium
+
+- id: no-broken-ssr-images
+  constraint: "In server-side rendering contexts, the capability MUST NOT emit JavaScript-only lazy loading that results in images with empty src in the initial HTML. SSR images must have their real src in the HTML (for crawlers/social preview) and only be intercepted client-side after hydration."
+  enforcement: guideline
+  severity: high
+```
+
+```yaml fixtures:
+- id: image_gallery_page
+  type: static
+  description: "A simulated page with 20 images: 3 above the fold, 17 below."
+  data:
+    viewport_height_px: 768
+    images:
+      - id: img_001
+        src: "https://images.example.com/hero.jpg"
+        width: 1200
+        height: 630
+        position_top_px: 0      # above fold — must be eager
+      - id: img_002
+        src: "https://images.example.com/feature-a.jpg"
+        width: 600
+        height: 400
+        position_top_px: 400   # above fold — must be eager
+      - id: img_003
+        src: "https://images.example.com/feature-b.jpg"
+        width: 600
+        height: 400
+        position_top_px: 700   # borderline (within 68px of fold)
+      - id: img_004
+        src: "https://images.example.com/gallery-01.jpg"
+        width: 300
+        height: 300
+        position_top_px: 900   # below fold — must be lazy
+      # ... (img_005 through img_020 all below fold)
+
+- id: no_dimensions_image
+  type: static
+  description: "Image missing width/height — should trigger NCV warning."
+  data:
+    id: img_nodim
+    src: "https://images.example.com/undimensioned.jpg"
+    # no width, no height
+
+- id: ssr_rendered_page
+  type: static
+  description: "Server-rendered HTML with img tags — validates that SSR path preserves real src in HTML output."
+  data:
+    html_snippet: '<img src="https://images.example.com/product.jpg" width="400" height="300" alt="Product photo">'
+```
+
+```yaml contracts:
+- id: contract-below-fold-not-loaded-initially
+  description: "Images positioned below the initial viewport are not fetched by the browser on page load. Their src attribute is replaced with a placeholder; the real src is stored in data-lazy-src."
+  given:
+    fixture: image_gallery_page
+  when:
+    action: page_load
+    measure: network_requests_on_load
+  then:
+    - network.images_requested_on_load: [img_001, img_002, img_003]   # only above-fold
+    - dom.img["img_004"].src: matches("^data:|placeholder")
+    - dom.img["img_004"].dataset.lazySrc: "https://images.example.com/gallery-01.jpg"
+    - network.img_004_requested: false
+
+- id: contract-loads-on-viewport-entry
+  description: "When the user scrolls to within 200px of a lazy image, the real src is set and the image loads."
+  given:
+    fixture: image_gallery_page
+    initial_state: page_loaded_with_lazy
+  when:
+    action: scroll_to
+    position_px: 700   # brings img_004 within rootMargin
+  then:
+    - dom.img["img_004"].src: "https://images.example.com/gallery-01.jpg"
+    - network.img_004_requested: true
+    - dom.img["img_004"].style.transition: contains("opacity")
+
+- id: contract-lcp-image-is-eager
+  description: "Images in the initial viewport get loading='eager' and fetchpriority='high' — they are never deferred."
+  given:
+    fixture: image_gallery_page
+  when:
+    action: capability_init
+  then:
+    - dom.img["img_001"].loading: "eager"
+    - dom.img["img_001"].fetchPriority: "high"
+    - dom.img["img_001"].dataset.lazySrc: absent
+    - dom.img["img_002"].loading: "eager"
+
+- id: contract-lcp-improvement
+  description: "On a simulated 4G connection with 20 images, LCP with lazy loading is at least 30% lower than LCP without lazy loading."
+  given:
+    fixture: image_gallery_page
+    network_profile: "4G (20 Mbps, 30ms RTT)"
+  when:
+    comparison:
+      baseline: page load without lazy loading
+      treatment: page load with capability installed
+  then:
+    - lcp_improvement_percent: ">= 30"
+    - cls_score: "< 0.1"   # no layout shift introduced
+    - total_bytes_on_load_reduction_percent: ">= 40"
+
+- id: contract-missing-dimensions-warns
+  description: "An image without explicit dimensions triggers a console.warn and is included in the install report, but does not break the page."
+  given:
+    fixture: no_dimensions_image
+  when:
+    action: capability_init
+  then:
+    - console.warn: contains("img_nodim")
+    - install_report.warnings: contains({type: "missing_dimensions", image_id: "img_nodim"})
+    - page.functional: true   # warning only, not a crash
+```
+
+```yaml interfaces:
+- id: lazy_load_config
+  description: "Optional configuration object passed to the capability initializer to customize behavior."
+  type: config
+  props:
+    rootMargin:
+      type: string
+      default: "200px"
+      description: "IntersectionObserver rootMargin. Increase to preload images sooner (e.g. '400px'), decrease to load later ('0px')."
+    threshold:
+      type: number
+      default: 0.01
+      description: "IntersectionObserver threshold. 0.01 = trigger when 1% of the image enters the margin zone."
+    placeholder:
+      type: string
+      enum: [lqip, color, blur-hash, none]
+      default: lqip
+      description: "Placeholder strategy while image is loading. 'lqip' uses a 20px wide blurred preview (requires server support). 'color' uses a solid dominant color. 'blur-hash' uses a BlurHash string from image metadata. 'none' shows blank space."
+    fadeInDuration:
+      type: integer
+      default: 300
+      description: "CSS transition duration in milliseconds for fade-in when image loads. Set to 0 to disable."
+    selector:
+      type: string
+      default: "img[data-lazy], img:not([loading])"
+      description: "CSS selector for images to target. Customize to exclude specific images (e.g. logos, icons) from lazy loading."
+    onLoad:
+      type: function
+      description: "Callback fired when a lazy image finishes loading: (imgElement: HTMLImageElement) => void"
+    onError:
+      type: function
+      description: "Callback fired when a lazy image fails to load: (imgElement: HTMLImageElement, error: Event) => void"
+
+- id: lazy_load_api
+  description: "Programmatic API exposed by the capability for manual control."
+  type: module_exports
+  exports:
+    initLazyLoad:
+      signature: "(config?: LazyLoadConfig) => LazyLoadInstance"
+      description: "Initialize lazy loading. Returns an instance with observe/unobserve/destroy methods."
+    observeImage:
+      signature: "(imgElement: HTMLImageElement) => void"
+      description: "Manually add a dynamically-added image to the observer pool. Useful for images added after initial page render."
+    unobserveImage:
+      signature: "(imgElement: HTMLImageElement) => void"
+      description: "Remove a specific image from observation (e.g. if it was removed from the DOM)."
+    forceLoadAll:
+      signature: "() => void"
+      description: "Immediately load all pending lazy images. Useful before printing (window.onbeforeprint)."
+    getStats:
+      signature: "() => LazyLoadStats"
+      description: "Returns statistics: {total: number, loaded: number, pending: number, errors: number}"
+```
