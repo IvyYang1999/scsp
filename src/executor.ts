@@ -553,7 +553,7 @@ export async function validateCompat(
         }
       }
 
-      // Check conflicts
+      // Check explicit conflicts
       const conflicts = fm.conflicts as Array<{ id: string; reason?: string }> | undefined;
       if (conflicts && snapshot.installed_capabilities) {
         const installedIds = new Set(snapshot.installed_capabilities.map((c) => c.id));
@@ -562,6 +562,25 @@ export async function validateCompat(
             issues.push(
               `CONFLICT_DETECTED: "${conflict.id}" is already installed. ` +
                 (conflict.reason ?? 'Conflicts with this capability.')
+            );
+          }
+        }
+      }
+
+      // Auto-detect anchor/surface conflicts across installed capabilities
+      if (snapshot.installed_capabilities && snapshot.installed_capabilities.length > 0) {
+        const newComponents = (fm.components as Array<{ id: string; anchors_used?: string[]; surfaces_touched?: string[] }>) ?? [];
+        const newAnchors = new Set(newComponents.flatMap((c) => c.anchors_used ?? []));
+        const newSurfaces = new Set(newComponents.flatMap((c) => c.surfaces_touched ?? []));
+
+        for (const installed of snapshot.installed_capabilities) {
+          // anchors_used overlap — same anchor bound by two capabilities is potentially conflicting
+          const installedAnchors = new Set(installed.anchors_used ?? []);
+          const sharedAnchors = [...newAnchors].filter((a) => installedAnchors.has(a));
+          if (sharedAnchors.length > 0) {
+            warnings.push(
+              `Anchor overlap with installed "${installed.id}": ${sharedAnchors.join(', ')}. ` +
+              `Both capabilities bind the same anchor — verify they compose correctly.`
             );
           }
         }
@@ -863,6 +882,54 @@ Important rules:
               throw new NcvViolationError(ncvEntry.id, msg);
             }
             ncvWarnings.push(msg);
+          }
+        }
+      }
+
+      // Check outbound_audit: detect network calls in generated code
+      if (universalEnf?.type === 'outbound_audit') {
+        const outboundPatterns = [
+          /\bfetch\s*\(/,
+          /\baxios\s*\./,
+          /\bhttp\.(?:get|post|request)\s*\(/,
+          /\bhttps\.(?:get|post|request)\s*\(/,
+          /new\s+(?:XMLHttpRequest|WebSocket)\s*\(/,
+        ];
+        const allowedDomains = (universalEnf as unknown as { allowed_domains?: string[] }).allowed_domains ?? [];
+        for (const fileChange of parsed.files) {
+          for (const pat of outboundPatterns) {
+            if (pat.test(fileChange.content)) {
+              // Check if it references an explicitly allowed domain
+              const hasAllowedDomain = allowedDomains.length > 0 &&
+                allowedDomains.some((d) => fileChange.content.includes(d));
+              if (!hasAllowedDomain) {
+                const msg = `NCV outbound_audit [${ncvEntry.id}] in ${fileChange.path}: detected potential network call — verify this is authorized by the capability spec`;
+                ncvWarnings.push(msg);
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      // Check structural_check: detect middleware/import order issues in generated code
+      if (universalEnf?.type === 'structural_check') {
+        const checkRule = (universalEnf as unknown as { rule?: string; before?: string; after?: string }).rule;
+        if (checkRule === 'middleware_order') {
+          const before = (universalEnf as unknown as { before?: string }).before;
+          const after = (universalEnf as unknown as { after?: string }).after;
+          if (before && after) {
+            for (const fileChange of parsed.files) {
+              const beforeIdx = fileChange.content.indexOf(before);
+              const afterIdx = fileChange.content.indexOf(after);
+              if (beforeIdx !== -1 && afterIdx !== -1 && beforeIdx > afterIdx) {
+                const msg = `NCV structural_check [${ncvEntry.id}] in ${fileChange.path}: "${before}" appears after "${after}" — middleware order violation`;
+                if (severity === 'critical') {
+                  throw new NcvViolationError(ncvEntry.id, msg);
+                }
+                ncvWarnings.push(msg);
+              }
+            }
           }
         }
       }
@@ -1390,6 +1457,40 @@ async function updateSnapshot(
   await fsp.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), 'utf-8');
 }
 
+// ─── Auto-report install results ─────────────────────────────────────────────
+
+/**
+ * Best-effort: POST install outcome to the registry metadata endpoint.
+ * Registry may not support this yet — failure is silent.
+ */
+async function reportInstallResult(
+  capId: string,
+  outcome: 'success' | 'fail' | 'rollback',
+  registryUrl: string
+): Promise<void> {
+  // Only attempt for HTTP registries, not local file:// ones
+  if (!registryUrl.startsWith('http')) return;
+
+  // Build the report URL (registry may expose a POST endpoint)
+  const reportUrl = `${registryUrl.replace(/\/registry$/, '')}/api/report`;
+
+  try {
+    await fetch(reportUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'scsp-cli/0.1.0' },
+      body: JSON.stringify({
+        capability_id: capId,
+        outcome,
+        reported_at: new Date().toISOString(),
+        cli_version: '0.1.0',
+      }),
+      signal: AbortSignal.timeout(3000), // 3s timeout
+    });
+  } catch {
+    // Best-effort — ignore all errors
+  }
+}
+
 // ─── Fetch capability ─────────────────────────────────────────────────────────
 
 async function fetchCapability(
@@ -1650,6 +1751,14 @@ export async function install(
     console.log(color('  ✓ host-snapshot.json updated', C.dim));
   } catch (err) {
     console.log(color(`  [WARN] Failed to update host-snapshot.json: ${(err as Error).message}`, C.yellow));
+  }
+
+  // ── Auto-report install result to registry ────────────────────────────────
+
+  try {
+    await reportInstallResult(fm.id as string, verifyResult.passed ? 'success' : 'fail', registryUrl);
+  } catch {
+    // silent — reporting is best-effort
   }
 
   // ── Final report ──────────────────────────────────────────────────────────

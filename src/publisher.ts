@@ -29,7 +29,9 @@ function extractId(raw: string): string | null {
   return idMatch ? idMatch[1].trim() : null;
 }
 
-export async function runPublish(filePath: string, registryRepo: string): Promise<void> {
+export async function runPublish(filePath: string, registryRepo: string, opts?: {
+  pricing?: { model: 'free' | 'one-time' | 'subscription'; amount?: number; currency?: string };
+}): Promise<void> {
   const absFile = path.resolve(filePath);
 
   // ── Step 1: validate ────────────────────────────────────────────────────────
@@ -103,12 +105,40 @@ export async function runPublish(filePath: string, registryRepo: string): Promis
   fs.copyFileSync(absFile, path.join(capTargetDir, `${capId}.scsp`));
   console.log(`  ✓ Copied ${capId}.scsp`);
 
+  // ── Register public key in AUTHORS.json ─────────────────────────────────────
+  const authorsPath = path.join(registryDir, 'registry', 'AUTHORS.json');
+  if (authorName) {
+    const home = process.env.HOME ?? process.env.USERPROFILE ?? '/tmp';
+    const pubKeyPath = path.join(home, '.scsp', 'keys', `${authorName}.public`);
+    if (fs.existsSync(pubKeyPath)) {
+      try {
+        const pubKey = fs.readFileSync(pubKeyPath, 'utf-8').trim();
+        let authorsData: { authors: Array<{ name: string; key: string; verified: boolean }> } = { authors: [] };
+        if (fs.existsSync(authorsPath)) {
+          try { authorsData = JSON.parse(fs.readFileSync(authorsPath, 'utf-8')); } catch { /* use empty */ }
+        }
+        const existing = authorsData.authors.find((a) => a.name === authorName);
+        if (!existing) {
+          authorsData.authors.push({ name: authorName, key: `ed25519:${pubKey}`, verified: false });
+          fs.writeFileSync(authorsPath, JSON.stringify(authorsData, null, 2) + '\n');
+          console.log(`  ✓ Registered public key for ${authorName} in AUTHORS.json`);
+        } else {
+          console.log(`  ℹ  ${authorName} already in AUTHORS.json`);
+        }
+      } catch (e) {
+        console.warn(`  ⚠  Could not register public key: ${(e as Error).message}`);
+      }
+    } else {
+      console.log(`  ℹ  No public key at ~/.scsp/keys/${authorName}.public — skipping AUTHORS.json registration`);
+    }
+  }
+
   // Create stub metadata.json if not present
   const metaPath = path.join(capTargetDir, 'metadata.json');
   if (!fs.existsSync(metaPath)) {
     const stub = {
       id: capId,
-      pricing: { model: 'free' },
+      pricing: opts?.pricing ?? { model: 'free' },
       preview_url: null,
       screenshots: [],
       reports: { success: 0, fail: 0, rollback: 0, sample_size: 0 },
@@ -145,7 +175,14 @@ export async function runPublish(filePath: string, registryRepo: string): Promis
   const branch = `add-capability/${capId}`;
 
   await run(`git checkout -b "${branch}"`, registryDir);
-  await run(`git add "registry/capabilities/${capId}/" "registry/index.json"`, registryDir);
+  // Include AUTHORS.json in the commit if it was modified
+  const authorsExists = fs.existsSync(path.join(registryDir, 'registry', 'AUTHORS.json'));
+  const filesToAdd = [
+    `"registry/capabilities/${capId}/"`,
+    `"registry/index.json"`,
+    ...(authorsExists ? [`"registry/AUTHORS.json"`] : []),
+  ].join(' ');
+  await run(`git add ${filesToAdd}`, registryDir);
   await run(
     `git -c user.name="scsp-publish" -c user.email="publish@scsp.local" commit -m "feat: add capability ${capId}"`,
     registryDir

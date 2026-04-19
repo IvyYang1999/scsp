@@ -805,6 +805,11 @@ function buildManifest(
       slots: confirmedSlots.map((s) => ({ id: s.id, description: s.description })),
       entities: entityAnchors,
     },
+    anchor_deprecation_policy: {
+      notice_period_days: 90,
+      // deprecated_by: { 'old.anchor.id': 'new.anchor.id' }
+      // sunset: { 'old.anchor.id': 'YYYY-MM-DD' }
+    },
   };
 
   // Build hints block

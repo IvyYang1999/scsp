@@ -11,6 +11,8 @@ import { pack } from './packer';
 import { search, fetchMetadata, type CapabilityMetadata } from './registry';
 import { runSnapshot } from './snapshot';
 import { runPublish } from './publisher';
+import { explore } from './explore';
+import { upgrade } from './upgrader';
 
 const program = new Command();
 
@@ -124,8 +126,9 @@ program
   .option('--base <branch>', 'Base branch to diff against', 'main')
   .option('--mode <mode>', 'Pack mode: quick (frontmatter+intent+probes) or full (everything)', 'quick')
   .option('--out <file>', 'Output file path')
+  .option('--interview', 'Run interactive failure knowledge interview after generation')
   .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
-  .action(async (opts: { base: string; mode: string; out?: string; apiKey?: string }) => {
+  .action(async (opts: { base: string; mode: string; out?: string; apiKey?: string; interview?: boolean }) => {
     const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       console.error('Error: ANTHROPIC_API_KEY required. Set env var or use --api-key <key>');
@@ -142,6 +145,7 @@ program
         out: opts.out,
         cwd: process.cwd(),
         apiKey,
+        interview: opts.interview,
       });
     } catch (err) {
       console.error(`Pack failed: ${(err as Error).message}`);
@@ -439,11 +443,81 @@ program
   .command('publish-cap <file>')
   .description('Publish a .scsp capability package to the registry via Pull Request')
   .option('--registry-repo <repo>', 'Target GitHub repo (owner/repo)', 'IvyYang1999/scsp')
-  .action(async (file: string, opts: { registryRepo: string }) => {
+  .option('--pricing <model>', 'Pricing model: free, one-time, subscription', 'free')
+  .option('--price <amount>', 'Price amount (for one-time or subscription)', '0')
+  .option('--currency <code>', 'Currency code (e.g. USD)', 'USD')
+  .action(async (file: string, opts: { registryRepo: string; pricing: string; price: string; currency: string }) => {
+    const pricingModel = opts.pricing as 'free' | 'one-time' | 'subscription';
+    const amount = parseFloat(opts.price) || 0;
     try {
-      await runPublish(file, opts.registryRepo);
+      await runPublish(file, opts.registryRepo, {
+        pricing: {
+          model: pricingModel,
+          ...(pricingModel !== 'free' && amount > 0 ? { amount, currency: opts.currency } : {}),
+        },
+      });
     } catch (err) {
       console.error(`Publish failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── explore ──────────────────────────────────────────────────────────────────
+
+program
+  .command('explore [query]')
+  .description('Explore capabilities with semantic search, boosted by your host snapshot')
+  .option('--tag <tags...>', 'Filter by tags')
+  .option('--surface <surfaces...>', 'Filter by surfaces')
+  .option('--registry <url>', 'Registry base URL')
+  .option('--limit <n>', 'Max results to show', '10')
+  .option('--preview', 'Preview the top result\'s intent section')
+  .action(async (query: string | undefined, opts: {
+    tag?: string[]; surface?: string[]; registry?: string; limit: string; preview?: boolean;
+  }) => {
+    const registryBase = opts.registry ?? (
+      fs.existsSync(path.join(process.cwd(), 'registry', 'index.json'))
+        ? path.join(process.cwd(), 'registry')
+        : undefined
+    );
+    try {
+      await explore({
+        query,
+        tags: opts.tag,
+        surfaces: opts.surface,
+        registryBase,
+        limit: parseInt(opts.limit, 10) || 10,
+        preview: opts.preview,
+        cwd: process.cwd(),
+      });
+    } catch (err) {
+      console.error(`Explore failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+// ─── upgrade ──────────────────────────────────────────────────────────────────
+
+program
+  .command('upgrade <id>')
+  .description('Upgrade an installed capability to the latest registry version')
+  .option('--registry <url>', 'Registry URL', 'https://raw.githubusercontent.com/IvyYang1999/scsp/main/registry')
+  .option('--api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
+  .action(async (id: string, opts: { registry: string; apiKey?: string }) => {
+    const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error('Error: ANTHROPIC_API_KEY required. Set env var or use --api-key <key>');
+      process.exit(1);
+    }
+    try {
+      await upgrade({
+        capabilityId: id,
+        registryUrl: opts.registry,
+        cwd: process.cwd(),
+        apiKey,
+      });
+    } catch (err) {
+      console.error(`Upgrade failed: ${(err as Error).message}`);
       process.exit(1);
     }
   });
